@@ -1,0 +1,387 @@
+---
+# Playbook: HCI一体机系统全面优化
+# 包含：系统基础优化、服务精简、安全加固、NPU优化
+# 执行时间: 约10-15分钟
+
+- name: HCI一体机系统优化
+  hosts: aibox
+  become: yes
+  gather_facts: yes
+  vars_files:
+    - ../group_vars/all.yml
+  
+  tasks:
+    # ================================================
+    # 1. 系统基础优化
+    # ================================================
+    - name: 设置主机名
+      hostname:
+        name: "ksc-aibox-node01"
+      tags: [system, hostname]
+
+    - name: 更新/etc/hosts
+      lineinfile:
+        path: /etc/hosts
+        regexp: '^127\.0\.0\.1'
+        line: "127.0.0.1   localhost localhost.localdomain ksc-aibox-node01"
+        state: present
+      tags: [system, hostname]
+
+    - name: 创建系统优化sysctl配置
+      copy:
+        dest: /etc/sysctl.d/99-ksc-aibox-optimization.conf
+        content: |
+          # KSC AIBox 系统优化配置
+          # 创建时间: {{ ansible_date_time.iso8601 }}
+          
+          # === 网络优化 ===
+          # 增加监听队列长度
+          net.core.somaxconn = 65535
+          # TCP连接复用
+          net.ipv4.tcp_tw_reuse = 1
+          # TCP FIN超时时间
+          net.ipv4.tcp_fin_timeout = 30
+          # 本地端口范围
+          net.ipv4.ip_local_port_range = 1024 65535
+          # SYN队列长度
+          net.ipv4.tcp_max_syn_backlog = 65535
+          # SYN cookies防护
+          net.ipv4.tcp_syncookies = 1
+          # TCP keepalive
+          net.ipv4.tcp_keepalive_time = 600
+          net.ipv4.tcp_keepalive_intvl = 30
+          net.ipv4.tcp_keepalive_probes = 3
+          # 最大TCP连接数
+          net.ipv4.tcp_max_tw_buckets = 65535
+          
+          # === 内存优化 ===
+          # Swap使用倾向 (0-100, 越小越少用)
+          vm.swappiness = 10
+          # 脏页比例
+          vm.dirty_ratio = 40
+          vm.dirty_background_ratio = 10
+          # 内存过量分配
+          vm.overcommit_memory = 1
+          # 内存映射最大数量 (Elasticsearch/Milvus需要)
+          vm.max_map_count = 262144
+          # 最小空闲内存
+          vm.min_free_kbytes = 1048576
+          
+          # === 文件系统 ===
+          # 最大文件描述符
+          fs.file-max = 2097152
+          fs.nr_open = 2097152
+          # AIO限制
+          fs.aio-max-nr = 1048576
+          
+          # === 内核信号 ===
+          # 信号量设置
+          kernel.sem = 250 32000 100 1024
+          # PID最大值
+          kernel.pid_max = 4194304
+          
+          # === 共享内存 (数据库需要) ===
+          kernel.shmmax = 68719476736
+          kernel.shmall = 4294967296
+        mode: '0644'
+        owner: root
+        group: root
+      tags: [system, kernel]
+
+    - name: 应用sysctl配置
+      command: sysctl -p /etc/sysctl.d/99-ksc-aibox-optimization.conf
+      tags: [system, kernel]
+
+    - name: 配置系统资源限制
+      copy:
+        dest: /etc/security/limits.d/99-ksc-aibox.conf
+        content: |
+          # KSC AIBox 资源限制配置
+          # 文件描述符
+          *    soft    nofile    655350
+          *    hard    nofile    655350
+          root soft    nofile    655350
+          root hard    nofile    655350
+          
+          # 进程数
+          *    soft    nproc     655350
+          *    hard    nproc     655350
+          root soft    nproc     655350
+          root hard    nproc     655350
+          
+          # 内存锁定 (NPU需要)
+          *    soft    memlock   unlimited
+          *    hard    memlock   unlimited
+          root soft    memlock   unlimited
+          root hard    memlock   unlimited
+          
+          # 栈大小
+          *    soft    stack     unlimited
+          *    hard    stack     unlimited
+        mode: '0644'
+        owner: root
+        group: root
+      tags: [system, limits]
+
+    # ================================================
+    # 2. HugePages配置 (NPU需要)
+    # ================================================
+    - name: 检查当前HugePages配置
+      shell: cat /proc/meminfo | grep HugePages_Total | awk '{print $2}'
+      register: current_hugepages
+      changed_when: false
+      tags: [npu, hugepages]
+
+    - name: 配置HugePages (256GB for NPU)
+      sysctl:
+        name: vm.nr_hugepages
+        value: "128000"
+        state: present
+        reload: yes
+        sysctl_file: /etc/sysctl.d/99-ksc-aibox-hugepages.conf
+      when: current_hugepages.stdout | int < 128000
+      tags: [npu, hugepages]
+
+    - name: 验证HugePages配置
+      shell: |
+        echo "HugePages_Total: $(grep HugePages_Total /proc/meminfo | awk '{print $2}')"
+        echo "Hugepagesize: $(grep Hugepagesize /proc/meminfo | awk '{print $2}') KB"
+      register: hugepages_verify
+      changed_when: false
+      tags: [npu, hugepages]
+
+    # ================================================
+    # 3. 服务精简
+    # ================================================
+    - name: 禁用不必要的服务
+      systemd:
+        name: "{{ item }}"
+        state: stopped
+        enabled: no
+      loop:
+        - bluetooth.service
+        - cups.service
+        - avahi-daemon.service
+        - ModemManager.service
+      failed_when: false
+      tags: [services, disable]
+
+    - name: 检查是否需要禁用图形界面
+      stat:
+        path: /etc/systemd/system/display-manager.service
+      register: display_manager
+      tags: [services, gui]
+
+    - name: 显示图形界面状态
+      debug:
+        msg: "图形界面已安装，如需禁用请手动执行: systemctl disable lightdm.service"
+      when: display_manager.stat.exists
+      tags: [services, gui]
+
+    - name: 配置tuned性能模式
+      command: tuned-adm profile accelerator-performance
+      tags: [services, tuned]
+
+    # ================================================
+    # 4. 安全加固
+    # ================================================
+    - name: 备份SSH配置
+      copy:
+        src: /etc/ssh/sshd_config
+        dest: /etc/ssh/sshd_config.bak.{{ ansible_date_time.iso8601_basic }}
+        remote_src: yes
+      tags: [security, ssh]
+
+    - name: SSH安全加固配置
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+        state: present
+        validate: 'sshd -t -f %s'
+      loop:
+        # 保持root登录但仅密钥认证（根据实际需求调整）
+        - { regexp: '^#?PermitRootLogin', line: 'PermitRootLogin prohibit-password' }
+        - { regexp: '^#?MaxAuthTries', line: 'MaxAuthTries 3' }
+        - { regexp: '^#?ClientAliveInterval', line: 'ClientAliveInterval 300' }
+        - { regexp: '^#?ClientAliveCountMax', line: 'ClientAliveCountMax 2' }
+        - { regexp: '^#?MaxSessions', line: 'MaxSessions 10' }
+      tags: [security, ssh]
+
+    - name: 配置防火墙默认区域
+      command: firewall-cmd --set-default-zone=public
+      tags: [security, firewall]
+
+    - name: 开放必要端口
+      firewalld:
+        port: "{{ item }}"
+        permanent: yes
+        state: enabled
+        immediate: yes
+      loop:
+        - "6443/tcp"    # K3s API
+        - "9000/tcp"    # MinIO API
+        - "9001/tcp"    # MinIO Console
+        - "9090/tcp"    # Prometheus
+        - "3000/tcp"    # Grafana
+        - "3306/tcp"    # MySQL
+        - "5432/tcp"    # PostgreSQL
+        - "6379/tcp"    # Redis
+        - "19530/tcp"   # Milvus
+        - "7687/tcp"    # Neo4j
+      tags: [security, firewall]
+
+    - name: 重载SSH服务
+      systemd:
+        name: sshd
+        state: reloaded
+      tags: [security, ssh]
+
+    # ================================================
+    # 5. NPU优化配置
+    # ================================================
+    - name: 创建NPU设备权限配置
+      copy:
+        dest: /etc/udev/rules.d/99-npu.rules
+        content: |
+          # NPU设备权限配置
+          KERNEL=="davinci[0-9]*", MODE="0666"
+          KERNEL=="davinci_manager", MODE="0666"
+          KERNEL=="devmm_svm", MODE="0666"
+          KERNEL=="hisi_hdc", MODE="0666"
+        mode: '0644'
+        owner: root
+        group: root
+      tags: [npu, udev]
+
+    - name: 重载udev规则
+      command: udevadm control --reload-rules
+      tags: [npu, udev]
+
+    - name: 创建NPU环境变量配置
+      copy:
+        dest: /etc/profile.d/ksc-aibox-npu.sh
+        content: |
+          # KSC AIBox NPU环境变量
+          export ASCEND_TOOLKIT_HOME=/usr/local/Ascend/ascend-toolkit
+          export ASCEND_HOME_PATH=/usr/local/Ascend
+          export LD_LIBRARY_PATH=/usr/local/Ascend/driver/lib64:$LD_LIBRARY_PATH
+          export PATH=/usr/local/Ascend/bin:$PATH
+          
+          # NPU设备可见性
+          export ASCEND_VISIBLE_DEVICES=0,1,2,3
+          
+          # 内存优化
+          export PYTORCH_NPU_ALLOC_CONF=expandable_segments:True
+        mode: '0644'
+        owner: root
+        group: root
+      tags: [npu, env]
+
+    - name: 创建NPU NUMA绑定脚本
+      copy:
+        dest: "{{ ksc_aibox_root }}/scripts/maintenance/npu-numa-bind.sh"
+        content: |
+          #!/bin/bash
+          # NPU NUMA亲和性绑定脚本
+          # 使用方法: ./npu-numa-bind.sh <npu_id> <command>
+          
+          NPU_ID=$1
+          shift
+          
+          case $NPU_ID in
+            0|1) NUMA_NODE=0 ;;
+            2|3) NUMA_NODE=1 ;;
+            *) echo "Invalid NPU ID: $NPU_ID"; exit 1 ;;
+          esac
+          
+          echo "Binding NPU $NPU_ID to NUMA node $NUMA_NODE"
+          numactl --cpunodebind=$NUMA_NODE --membind=$NUMA_NODE "$@"
+        mode: '0755'
+        owner: root
+        group: root
+      tags: [npu, numa]
+
+    # ================================================
+    # 6. 创建版本信息文件
+    # ================================================
+    - name: 创建系统版本信息文件
+      copy:
+        dest: "{{ ksc_aibox_root }}/VERSION"
+        content: |
+          KSC AIBox 版本信息
+          ==================
+          版本: 1.0.0
+          构建时间: {{ ansible_date_time.iso8601 }}
+          主机名: ksc-aibox-node01
+          
+          系统信息:
+          - 操作系统: {{ ansible_distribution }} {{ ansible_distribution_version }}
+          - 内核: {{ ansible_kernel }}
+          - 架构: {{ ansible_architecture }}
+          
+          硬件信息:
+          - CPU: 鲲鹏920 64核
+          - 内存: 250GB
+          - NPU: 昇腾910B4-1 × 4
+          - 存储: 4TB NVMe SSD
+          
+          目录结构:
+          - 应用目录: {{ ksc_aibox_root }}/apps
+          - 数据目录: {{ ksc_aibox_root }}/data
+          - 模型目录: {{ ksc_aibox_root }}/models
+          - 备份目录: /backup
+        mode: '0644'
+        owner: root
+        group: root
+      tags: [system, version]
+
+    # ================================================
+    # 7. 验证优化结果
+    # ================================================
+    - name: 验证系统优化结果
+      shell: |
+        echo "=== 主机名 ==="
+        hostname
+        
+        echo ""
+        echo "=== HugePages ==="
+        grep HugePages /proc/meminfo | head -3
+        
+        echo ""
+        echo "=== 关键内核参数 ==="
+        sysctl net.core.somaxconn vm.max_map_count fs.file-max 2>/dev/null
+        
+        echo ""
+        echo "=== Tuned配置 ==="
+        tuned-adm active 2>/dev/null | head -1
+        
+        echo ""
+        echo "=== 防火墙开放端口 ==="
+        firewall-cmd --list-ports 2>/dev/null
+      register: optimization_verify
+      changed_when: false
+      tags: [verify]
+
+    - name: 显示优化结果
+      debug:
+        msg: "{{ optimization_verify.stdout_lines }}"
+      tags: [verify]
+
+  post_tasks:
+    - name: 优化完成提示
+      debug:
+        msg:
+          - "=========================================="
+          - "HCI一体机系统优化完成!"
+          - "=========================================="
+          - "已完成项目:"
+          - "  ✅ 系统基础优化 (主机名、内核参数、资源限制)"
+          - "  ✅ HugePages配置 (256GB)"
+          - "  ✅ 服务精简 (禁用蓝牙、打印等)"
+          - "  ✅ 安全加固 (SSH、防火墙)"
+          - "  ✅ NPU优化 (设备权限、NUMA绑定脚本)"
+          - "=========================================="
+          - "注意: 部分优化需要重启后完全生效"
+          - "=========================================="
+      tags: [always]

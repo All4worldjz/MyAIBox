@@ -1,0 +1,113 @@
+---
+# 金山政务AI一体机全局配置变量
+# ================================================
+
+# 基础路径配置
+ksc_aibox_root: /ksc_aibox
+backup_root: /backup
+
+# ksc_aibox子目录配置
+ksc_aibox_dirs:
+  apps: "{{ ksc_aibox_root }}/apps"
+  data: "{{ ksc_aibox_root }}/data"
+  models: "{{ ksc_aibox_root }}/models"
+  k3s: "{{ ksc_aibox_root }}/k3s"
+  docker: "{{ ksc_aibox_root }}/docker"
+  logs: "{{ ksc_aibox_root }}/logs"
+  scripts: "{{ ksc_aibox_root }}/scripts"
+  config: "{{ ksc_aibox_root }}/config"
+  tmp: "{{ ksc_aibox_root }}/tmp"
+
+# 应用子目录
+apps_dirs:
+  ascend: "{{ ksc_aibox_root }}/apps/ascend"
+  vllm: "{{ ksc_aibox_root }}/apps/vllm"
+  ai_service: "{{ ksc_aibox_root }}/apps/ai-service"
+  custom: "{{ ksc_aibox_root }}/apps/custom"
+
+# 数据库子目录
+data_dirs:
+  mysql: "{{ ksc_aibox_root }}/data/mysql"
+  postgres: "{{ ksc_aibox_root }}/data/postgres"
+  redis: "{{ ksc_aibox_root }}/data/redis"
+  milvus: "{{ ksc_aibox_root }}/data/milvus"
+  neo4j: "{{ ksc_aibox_root }}/data/neo4j"
+  minio: "{{ ksc_aibox_root }}/data/minio"
+
+# 模型子目录
+models_dirs:
+  llm: "{{ ksc_aibox_root }}/models/llm"
+  embedding: "{{ ksc_aibox_root }}/models/embedding"
+  rerank: "{{ ksc_aibox_root }}/models/rerank"
+  vl: "{{ ksc_aibox_root }}/models/vl"
+  mineru: "{{ ksc_aibox_root }}/models/mineru"
+
+# K3s子目录
+k3s_dirs:
+  data: "{{ ksc_aibox_root }}/k3s/data"
+  storage: "{{ ksc_aibox_root }}/k3s/storage"
+  manifests: "{{ ksc_aibox_root }}/k3s/manifests"
+  helm: "{{ ksc_aibox_root }}/k3s/helm"
+  kubeconfig: "{{ ksc_aibox_root }}/k3s/kubeconfig"
+
+# Docker子目录
+docker_dirs:
+  data: "{{ ksc_aibox_root }}/docker/data"
+  compose: "{{ ksc_aibox_root }}/docker/compose"
+  config: "{{ ksc_aibox_root }}/docker/config"
+  scripts: "{{ ksc_aibox_root }}/docker/scripts"
+
+# 备份子目录
+backup_dirs:
+  system: "{{ backup_root }}/system"
+  application: "{{ backup_root }}/application"
+  archive: "{{ backup_root }}/archive"
+  logs: "{{ backup_root }}/logs"
+
+# 系统配置
+system_locale: zh_CN.UTF-8
+system_timezone: Asia/Shanghai
+
+# NPU配置
+npu_devices:
+  - davinci0
+  - davinci1
+  - davinci2
+  - davinci3
+npu_driver_version: "25.2.3"
+
+# 服务端口配置
+service_ports:
+  ai_service: 8122
+  vllm: 8102
+  mysql: 3306
+  postgres: 5432
+  redis: 6379
+  milvus: 19530
+  neo4j: 7687
+  minio_api: 9000
+  minio_console: 9001
+  k3s_api: 6443
+
+# Docker配置
+docker_data_root: "{{ ksc_aibox_root }}/docker/data"
+docker_storage_driver: overlay2
+docker_log_driver: json-file
+docker_log_max_size: "100m"
+docker_log_max_file: 3
+
+# K3s配置
+k3s_data_dir: "{{ ksc_aibox_root }}/k3s/data"
+k3s_version: v1.31.4+k3s1
+k3s_token: "ksc-aibox-k3s-token"
+
+# 备份配置
+backup_retention:
+  daily: 7
+  weekly: 4
+  monthly: 12
+  yearly: 3
+
+# 日志配置
+log_retention_days: 30
+log_max_size_mb: 100

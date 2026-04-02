@@ -1,0 +1,58 @@
+# KSC AIBox Ansible Project
+# Git忽略配置
+
+# Ansible
+*.retry
+ansible.log
+ansible/*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# 临时文件
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# 密钥和敏感信息
+*.pem
+*.key
+*.pub
+secrets/
+*.secret
+.env
+.env.*
+
+# 日志
+logs/
+*.log
+
+# 缓存
+.cache/
+
+# 测试输出
+test-results/
+coverage/
+
+# 打包文件
+*.tar.gz
+*.zip

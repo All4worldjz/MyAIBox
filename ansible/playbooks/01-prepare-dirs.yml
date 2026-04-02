@@ -1,0 +1,341 @@
+---
+# Playbook: 创建ksc_aibox和backup目录结构
+# 阶段1: 无风险操作，仅创建目录结构
+# 执行时间: 约1分钟
+
+- name: 创建ksc_aibox和backup目录结构
+  hosts: aibox
+  become: yes
+  gather_facts: yes
+  vars_files:
+    - ../group_vars/all.yml
+  
+  tasks:
+    # ================================================
+    # 1. 创建ksc_aibox主目录
+    # ================================================
+    - name: 创建ksc_aibox主目录
+      file:
+        path: "{{ ksc_aibox_root }}"
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+      tags: [always, create_dirs]
+
+    - name: 创建ksc_aibox一级子目录
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+      loop:
+        - "{{ ksc_aibox_dirs.apps }}"
+        - "{{ ksc_aibox_dirs.data }}"
+        - "{{ ksc_aibox_dirs.models }}"
+        - "{{ ksc_aibox_dirs.k3s }}"
+        - "{{ ksc_aibox_dirs.docker }}"
+        - "{{ ksc_aibox_dirs.logs }}"
+        - "{{ ksc_aibox_dirs.scripts }}"
+        - "{{ ksc_aibox_dirs.config }}"
+        - "{{ ksc_aibox_dirs.tmp }}"
+      tags: [create_dirs]
+
+    # ================================================
+    # 2. 创建apps应用子目录
+    # ================================================
+    - name: 创建apps应用子目录
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+      loop:
+        - "{{ apps_dirs.ascend }}"
+        - "{{ apps_dirs.vllm }}"
+        - "{{ apps_dirs.vllm }}/config"
+        - "{{ apps_dirs.vllm }}/logs"
+        - "{{ apps_dirs.vllm }}/scripts"
+        - "{{ apps_dirs.ai_service }}"
+        - "{{ apps_dirs.ai_service }}/workspace"
+        - "{{ apps_dirs.ai_service }}/config"
+        - "{{ apps_dirs.ai_service }}/logs"
+        - "{{ apps_dirs.custom }}"
+      tags: [create_dirs, apps_dirs]
+
+    # ================================================
+    # 3. 创建data数据库子目录
+    # ================================================
+    - name: 创建data数据库子目录
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+      loop:
+        - "{{ data_dirs.mysql }}"
+        - "{{ data_dirs.postgres }}"
+        - "{{ data_dirs.redis }}"
+        - "{{ data_dirs.milvus }}"
+        - "{{ data_dirs.neo4j }}"
+        - "{{ data_dirs.minio }}"
+      tags: [create_dirs, data_dirs]
+
+    # ================================================
+    # 4. 创建models模型子目录
+    # ================================================
+    - name: 创建models模型子目录
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+      loop:
+        - "{{ models_dirs.llm }}"
+        - "{{ models_dirs.embedding }}"
+        - "{{ models_dirs.rerank }}"
+        - "{{ models_dirs.vl }}"
+        - "{{ models_dirs.mineru }}"
+      tags: [create_dirs, models_dirs]
+
+    # ================================================
+    # 5. 创建k3s子目录
+    # ================================================
+    - name: 创建k3s子目录
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+      loop:
+        - "{{ k3s_dirs.data }}"
+        - "{{ k3s_dirs.storage }}"
+        - "{{ k3s_dirs.manifests }}"
+        - "{{ k3s_dirs.helm }}"
+        - "{{ k3s_dirs.kubeconfig }}"
+      tags: [create_dirs, k3s_dirs]
+
+    # ================================================
+    # 6. 创建docker子目录
+    # ================================================
+    - name: 创建docker子目录
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+      loop:
+        - "{{ docker_dirs.data }}"
+        - "{{ docker_dirs.compose }}"
+        - "{{ docker_dirs.config }}"
+        - "{{ docker_dirs.scripts }}"
+      tags: [create_dirs, docker_dirs]
+
+    # ================================================
+    # 7. 创建logs日志子目录
+    # ================================================
+    - name: 创建logs日志子目录
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+      loop:
+        - "{{ ksc_aibox_dirs.logs }}/vllm"
+        - "{{ ksc_aibox_dirs.logs }}/ai-service"
+        - "{{ ksc_aibox_dirs.logs }}/k3s"
+        - "{{ ksc_aibox_dirs.logs }}/mysql"
+        - "{{ ksc_aibox_dirs.logs }}/postgres"
+        - "{{ ksc_aibox_dirs.logs }}/redis"
+        - "{{ ksc_aibox_dirs.logs }}/milvus"
+        - "{{ ksc_aibox_dirs.logs }}/neo4j"
+        - "{{ ksc_aibox_dirs.logs }}/system"
+      tags: [create_dirs, logs_dirs]
+
+    # ================================================
+    # 8. 创建scripts脚本子目录
+    # ================================================
+    - name: 创建scripts脚本子目录
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+      loop:
+        - "{{ ksc_aibox_dirs.scripts }}/install"
+        - "{{ ksc_aibox_dirs.scripts }}/backup"
+        - "{{ ksc_aibox_dirs.scripts }}/restore"
+        - "{{ ksc_aibox_dirs.scripts }}/monitor"
+        - "{{ ksc_aibox_dirs.scripts }}/maintenance"
+      tags: [create_dirs, scripts_dirs]
+
+    # ================================================
+    # 9. 创建config配置子目录
+    # ================================================
+    - name: 创建config配置子目录
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+      loop:
+        - "{{ ksc_aibox_dirs.config }}/ansible"
+        - "{{ ksc_aibox_dirs.config }}/env"
+        - "{{ ksc_aibox_dirs.config }}/secrets"
+        - "{{ ksc_aibox_dirs.config }}/systemd"
+      tags: [create_dirs, config_dirs]
+
+    # ================================================
+    # 10. 创建backup备份目录
+    # ================================================
+    - name: 创建backup主目录
+      file:
+        path: "{{ backup_root }}"
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+      tags: [create_dirs, backup_dirs]
+
+    - name: 创建backup子目录
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+      loop:
+        - "{{ backup_dirs.system }}"
+        - "{{ backup_dirs.system }}/root_fs"
+        - "{{ backup_dirs.system }}/config"
+        - "{{ backup_dirs.system }}/config/etc"
+        - "{{ backup_dirs.system }}/config/fstab"
+        - "{{ backup_dirs.system }}/config/systemd"
+        - "{{ backup_dirs.system }}/packages"
+        - "{{ backup_dirs.application }}"
+        - "{{ backup_dirs.application }}/ksc_aibox"
+        - "{{ backup_dirs.application }}/databases"
+        - "{{ backup_dirs.application }}/databases/mysql"
+        - "{{ backup_dirs.application }}/databases/postgres"
+        - "{{ backup_dirs.application }}/databases/milvus"
+        - "{{ backup_dirs.application }}/databases/neo4j"
+        - "{{ backup_dirs.application }}/models"
+        - "{{ backup_dirs.application }}/docker"
+        - "{{ backup_dirs.archive }}"
+        - "{{ backup_dirs.archive }}/monthly"
+        - "{{ backup_dirs.archive }}/yearly"
+        - "{{ backup_dirs.logs }}"
+      tags: [create_dirs, backup_dirs]
+
+    # ================================================
+    # 11. 设置SELinux上下文（如果SELinux启用）
+    # ================================================
+    - name: 检查SELinux状态
+      command: getenforce
+      register: selinux_status
+      changed_when: false
+      tags: [selinux]
+
+    - name: 设置ksc_aibox目录SELinux上下文
+      command: semanage fcontext -a -t var_lib_t "{{ ksc_aibox_root }}(/.*)?"
+      when: selinux_status.stdout == "Enforcing"
+      tags: [selinux]
+
+    - name: 设置backup目录SELinux上下文
+      command: semanage fcontext -a -t var_lib_t "{{ backup_root }}(/.*)?"
+      when: selinux_status.stdout == "Enforcing"
+      tags: [selinux]
+
+    - name: 恢复SELinux上下文
+      command: restorecon -Rv "{{ ksc_aibox_root }}" "{{ backup_root }}"
+      when: selinux_status.stdout == "Enforcing"
+      tags: [selinux]
+
+    # ================================================
+    # 12. 验证目录结构
+    # ================================================
+    - name: 验证ksc_aibox目录结构
+      command: ls -la "{{ ksc_aibox_root }}"
+      register: verify_ksc
+      changed_when: false
+      tags: [verify]
+
+    - name: 验证backup目录结构
+      command: ls -la "{{ backup_root }}"
+      register: verify_backup
+      changed_when: false
+      tags: [verify]
+
+    - name: 显示目录创建结果
+      debug:
+        msg:
+          - "ksc_aibox目录创建完成: {{ ksc_aibox_root }}"
+          - "backup目录创建完成: {{ backup_root }}"
+          - "SELinux状态: {{ selinux_status.stdout }}"
+      tags: [verify]
+
+    # ================================================
+    # 13. 创建目录结构信息文件
+    # ================================================
+    - name: 创建目录结构信息文件
+      copy:
+        dest: "{{ ksc_aibox_root }}/DIRECTORY_STRUCTURE.md"
+        content: |
+          # 金山政务AI一体机目录结构
+          # 创建时间: {{ ansible_date_time.iso8601 }}
+          # 创建主机: {{ ansible_hostname }}
+          
+          ## 主目录
+          - {{ ksc_aibox_root }} - 应用工作分区
+          - {{ backup_root }} - 系统备份分区
+          
+          ## 子目录结构
+          ### apps - 应用程序
+          - ascend/ - Ascend软件栈
+          - vllm/ - vLLM推理服务
+          - ai-service/ - AI服务应用
+          - custom/ - 自定义应用
+          
+          ### data - 数据库
+          - mysql/ - MySQL数据
+          - postgres/ - PostgreSQL数据
+          - redis/ - Redis数据
+          - milvus/ - Milvus向量库
+          - neo4j/ - Neo4j图数据库
+          - minio/ - MinIO对象存储
+          
+          ### models - 模型文件
+          - llm/ - 大语言模型
+          - embedding/ - 嵌入模型
+          - rerank/ - 重排序模型
+          - vl/ - 视觉语言模型
+          - mineru/ - MinerU模型
+          
+          ### k3s - Kubernetes
+          - data/ - K3s数据目录
+          - storage/ - 本地存储
+          - manifests/ - 部署清单
+          - helm/ - Helm charts
+          
+          ### docker - Docker
+          - data/ - Docker数据目录
+          - compose/ - compose文件
+          - config/ - 配置文件
+          
+          ### logs - 日志
+          ### scripts - 脚本
+          ### config - 配置
+          ### tmp - 临时文件
+        mode: '0644'
+        owner: root
+        group: root
+      tags: [info]

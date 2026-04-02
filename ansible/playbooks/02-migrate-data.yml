@@ -1,0 +1,473 @@
+---
+# Playbook: 数据迁移
+# 阶段2: 迁移Docker数据、模型文件、应用文件
+# 注意: 此操作需要停止服务，请确保已备份重要数据
+# 执行时间: 约30-60分钟（取决于数据量）
+
+- name: 数据迁移准备检查
+  hosts: aibox
+  become: yes
+  gather_facts: yes
+  vars_files:
+    - ../group_vars/all.yml
+  
+  pre_tasks:
+    - name: 检查目标目录是否存在
+      stat:
+        path: "{{ ksc_aibox_root }}"
+      register: ksc_root_check
+      
+    - name: 检查backup目录是否存在
+      stat:
+        path: "{{ backup_root }}"
+      register: backup_root_check
+      
+    - name: 确认目录结构已创建
+      fail:
+        msg: "请先执行01-prepare-dirs.yml创建目录结构"
+      when: not ksc_root_check.stat.exists or not backup_root_check.stat.exists
+      
+    - name: 显示迁移警告
+      debug:
+        msg:
+          - "=========================================="
+          - "警告: 数据迁移操作将停止以下服务:"
+          - "- Docker服务"
+          - "- ai-service容器"
+          - "- qwen332b容器"
+          - "=========================================="
+          - "预计迁移时间: 30-60分钟"
+          - "数据量: Docker(~24GB) + 模型(~333GB)"
+      tags: [always]
+
+- name: 迁移Docker数据目录
+  hosts: aibox
+  become: yes
+  serial: 1
+  vars_files:
+    - ../group_vars/all.yml
+  
+  tasks:
+    # ================================================
+    # 1. 备份当前Docker配置
+    # ================================================
+    - name: 备份Docker配置文件
+      copy:
+        src: /etc/docker/daemon.json
+        dest: "{{ backup_dirs.system }}/config/docker-daemon.json.bak"
+        remote_src: yes
+        force: yes
+      ignore_errors: yes
+      tags: [docker, backup]
+
+    - name: 记录当前Docker信息
+      shell: |
+        docker info > {{ backup_dirs.system }}/config/docker-info.txt 2>/dev/null || true
+        docker images > {{ backup_dirs.system }}/config/docker-images.txt 2>/dev/null || true
+        docker ps -a > {{ backup_dirs.system }}/config/docker-containers.txt 2>/dev/null || true
+      tags: [docker, backup]
+
+    # ================================================
+    # 2. 停止Docker服务和容器
+    # ================================================
+    - name: 停止所有运行中的容器
+      shell: docker stop $(docker ps -q) 2>/dev/null || true
+      tags: [docker, stop]
+
+    - name: 停止Docker服务
+      systemd:
+        name: docker
+        state: stopped
+      tags: [docker, stop]
+
+    - name: 等待Docker完全停止
+      wait_for:
+        timeout: 10
+      tags: [docker, stop]
+
+    # ================================================
+    # 3. 迁移Docker数据目录
+    # ================================================
+    - name: 检查源Docker数据目录大小
+      shell: du -sh /var/lib/docker
+      register: docker_size
+      changed_when: false
+      tags: [docker, migrate]
+
+    - name: 显示Docker数据大小
+      debug:
+        msg: "Docker数据目录大小: {{ docker_size.stdout }}"
+      tags: [docker, migrate]
+
+    - name: 复制Docker数据到新位置
+      shell: |
+        rsync -avh --progress /var/lib/docker/ {{ docker_dirs.data }}/ \
+          --log-file={{ ksc_aibox_dirs.logs }}/docker-migrate.log
+      register: docker_rsync
+      tags: [docker, migrate]
+
+    - name: 验证Docker数据迁移完成
+      shell: |
+        diff -r /var/lib/docker {{ docker_dirs.data }} > /dev/null 2>&1 && echo "验证成功" || echo "验证失败"
+      register: docker_verify
+      changed_when: false
+      tags: [docker, migrate]
+
+    - name: 确认Docker数据迁移成功
+      fail:
+        msg: "Docker数据迁移验证失败，请检查日志"
+      when: docker_verify.stdout != "验证成功"
+      tags: [docker, migrate]
+
+    # ================================================
+    # 4. 配置Docker使用新数据目录
+    # ================================================
+    - name: 创建Docker配置目录
+      file:
+        path: /etc/docker
+        state: directory
+        mode: '0755'
+      tags: [docker, config]
+
+    - name: 配置Docker daemon.json
+      copy:
+        dest: /etc/docker/daemon.json
+        content: |
+          {
+            "data-root": "{{ docker_dirs.data }}",
+            "storage-driver": "{{ docker_storage_driver }}",
+            "log-driver": "{{ docker_log_driver }}",
+            "log-opts": {
+              "max-size": "{{ docker_log_max_size }}",
+              "max-file": "{{ docker_log_max_file }}"
+            },
+            "default-ulimits": {
+              "nofile": {
+                "Name": "nofile",
+                "Hard": 65535,
+                "Soft": 65535
+              }
+            }
+          }
+        mode: '0644'
+        owner: root
+        group: root
+      tags: [docker, config]
+
+    - name: 创建Docker systemd配置目录
+      file:
+        path: /etc/systemd/system/docker.service.d
+        state: directory
+        mode: '0755'
+      tags: [docker, config]
+
+    - name: 配置Docker systemd override
+      copy:
+        dest: /etc/systemd/system/docker.service.d/override.conf
+        content: |
+          [Service]
+          ExecStart=
+          ExecStart=/usr/bin/dockerd --data-root={{ docker_dirs.data }}
+        mode: '0644'
+      tags: [docker, config]
+
+    - name: 重载systemd配置
+      systemd:
+        daemon_reload: yes
+      tags: [docker, config]
+
+    # ================================================
+    # 5. 启动Docker服务
+    # ================================================
+    - name: 启动Docker服务
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+      tags: [docker, start]
+
+    - name: 等待Docker服务就绪
+      wait_for:
+        timeout: 15
+      tags: [docker, start]
+
+    - name: 验证Docker服务状态
+      command: docker info
+      register: docker_info
+      changed_when: false
+      tags: [docker, verify]
+
+    - name: 验证Docker数据目录
+      shell: docker info | grep "Docker Root Dir"
+      register: docker_root_dir
+      changed_when: false
+      tags: [docker, verify]
+
+    - name: 显示Docker新配置
+      debug:
+        msg: "Docker数据目录已更新: {{ docker_root_dir.stdout }}"
+      tags: [docker, verify]
+
+    # ================================================
+    # 6. 清理旧Docker数据（可选，需手动确认）
+    # ================================================
+    - name: 创建清理脚本
+      copy:
+        dest: "{{ ksc_aibox_dirs.scripts }}/maintenance/cleanup-old-docker.sh"
+        content: |
+          #!/bin/bash
+          # 清理旧的Docker数据目录
+          # 执行前请确保Docker服务正常运行且数据已迁移成功
+          
+          echo "警告: 此操作将删除 /var/lib/docker 目录"
+          echo "请确认Docker服务正常运行后再执行"
+          read -p "确认删除? (yes/no): " confirm
+          
+          if [ "$confirm" == "yes" ]; then
+              rm -rf /var/lib/docker/*
+              echo "清理完成"
+          else
+              echo "取消操作"
+          fi
+        mode: '0755'
+        owner: root
+        group: root
+      tags: [docker, cleanup]
+
+- name: 迁移模型文件
+  hosts: aibox
+  become: yes
+  vars_files:
+    - ../group_vars/all.yml
+  
+  tasks:
+    # ================================================
+    # 1. 检查模型文件源目录
+    # ================================================
+    - name: 检查/home/aimodel目录
+      stat:
+        path: /home/aimodel
+      register: aimodel_check
+      tags: [models, check]
+
+    - name: 显示模型文件大小
+      shell: du -sh /home/aimodel/*
+      register: model_sizes
+      changed_when: false
+      tags: [models, check]
+
+    - name: 显示模型文件信息
+      debug:
+        msg: "{{ model_sizes.stdout_lines }}"
+      tags: [models, check]
+
+    # ================================================
+    # 2. 迁移模型文件到分类目录
+    # ================================================
+    - name: 迁移LLM模型
+      block:
+        - name: 迁移qwen332b模型
+          shell: |
+            if [ -d "/home/aimodel/qwen332b" ]; then
+              mv /home/aimodel/qwen332b {{ models_dirs.llm }}/qwen332b
+              echo "qwen332b迁移完成"
+            fi
+          register: migrate_qwen332b
+          tags: [models, llm]
+
+        - name: 迁移qwen332bfp8模型
+          shell: |
+            if [ -d "/home/aimodel/qwen332bfp8" ]; then
+              mv /home/aimodel/qwen332bfp8 {{ models_dirs.llm }}/qwen332bfp8
+              echo "qwen332bfp8迁移完成"
+            fi
+          tags: [models, llm]
+
+        - name: 迁移Qwen3-14B模型
+          shell: |
+            if [ -d "/home/aimodel/Qwen3-14B" ]; then
+              mv /home/aimodel/Qwen3-14B {{ models_dirs.llm }}/Qwen3-14B
+              echo "Qwen3-14B迁移完成"
+            fi
+          tags: [models, llm]
+
+        - name: 迁移deepseek70b模型
+          shell: |
+            if [ -d "/home/aimodel/deepseek70b" ]; then
+              mv /home/aimodel/deepseek70b {{ models_dirs.llm }}/deepseek70b
+              echo "deepseek70b迁移完成"
+            fi
+          tags: [models, llm]
+
+    - name: 迁移Embedding模型
+      block:
+        - name: 迁移Qwen3-Embedding-8B模型
+          shell: |
+            if [ -d "/home/aimodel/Qwen3-Embedding-8B" ]; then
+              mv /home/aimodel/Qwen3-Embedding-8B {{ models_dirs.embedding }}/Qwen3-Embedding-8B
+              echo "Qwen3-Embedding-8B迁移完成"
+            fi
+          tags: [models, embedding]
+
+    - name: 迁移VL模型
+      block:
+        - name: 迁移Qwen3-VL-32B-Instruct模型
+          shell: |
+            if [ -d "/home/aimodel/Qwen3-VL-32B-Instruct" ]; then
+              mv /home/aimodel/Qwen3-VL-32B-Instruct {{ models_dirs.vl }}/Qwen3-VL-32B-Instruct
+              echo "Qwen3-VL-32B-Instruct迁移完成"
+            fi
+          tags: [models, vl]
+
+    - name: 迁移其他模型
+      block:
+        - name: 迁移MinerU模型
+          shell: |
+            if [ -d "/home/aimodel/MinerU2.5-2509-1.2B" ]; then
+              mv /home/aimodel/MinerU2.5-2509-1.2B {{ models_dirs.mineru }}/MinerU2.5-2509-1.2B
+              echo "MinerU迁移完成"
+            fi
+          tags: [models, mineru]
+
+        - name: 迁移speculator模型
+          shell: |
+            if [ -d "/home/aimodel/Qwen3-14B-speculator.eagle3" ]; then
+              mv /home/aimodel/Qwen3-14B-speculator.eagle3 {{ models_dirs.llm }}/Qwen3-14B-speculator.eagle3
+              echo "speculator迁移完成"
+            fi
+          tags: [models, other]
+
+    # ================================================
+    # 3. 创建软链接保持兼容性
+    # ================================================
+    - name: 创建/home/aimodel软链接
+      file:
+        src: "{{ ksc_aibox_dirs.models }}"
+        dest: /home/aimodel
+        state: link
+        force: yes
+      when: aimodel_check.stat.exists
+      tags: [models, symlink]
+
+    - name: 验证软链接
+      stat:
+        path: /home/aimodel
+      register: aimodel_link
+      tags: [models, verify]
+
+    - name: 显示模型迁移结果
+      debug:
+        msg:
+          - "模型文件已迁移到: {{ ksc_aibox_dirs.models }}"
+          - "软链接已创建: /home/aimodel -> {{ ksc_aibox_dirs.models }}"
+          - "软链接状态: {{ aimodel_link.stat.islnk }}"
+      tags: [models, verify]
+
+- name: 迁移ai-service应用文件
+  hosts: aibox
+  become: yes
+  vars_files:
+    - ../group_vars/all.yml
+  
+  tasks:
+    # ================================================
+    # 1. 检查ai-service源目录
+    # ================================================
+    - name: 检查/home/lawyee目录
+      stat:
+        path: /home/lawyee/v2.2.1-aarch64
+      register: lawyee_check
+      tags: [ai-service, check]
+
+    # ================================================
+    # 2. 迁移ai-service文件
+    # ================================================
+    - name: 迁移ai-service workspace
+      shell: |
+        if [ -d "/home/lawyee/v2.2.1-aarch64/workspace" ]; then
+          cp -r /home/lawyee/v2.2.1-aarch64/workspace/* {{ apps_dirs.ai_service }}/workspace/
+          echo "ai-service workspace迁移完成"
+        fi
+      when: lawyee_check.stat.exists
+      tags: [ai-service, migrate]
+
+    - name: 复制docker-compose文件
+      shell: |
+        if [ -f "/home/lawyee/v2.2.1-aarch64/docker-compose.yml" ]; then
+          cp /home/lawyee/v2.2.1-aarch64/docker-compose.yml {{ docker_dirs.compose }}/ai-service.yml
+          echo "docker-compose文件复制完成"
+        fi
+      when: lawyee_check.stat.exists
+      tags: [ai-service, migrate]
+
+    - name: 复制镜像文件
+      shell: |
+        if [ -f "/home/lawyee/v2.2.1-aarch64/lawyee_ai-service_v2.2.1-aarch64.tar.gz" ]; then
+          mv /home/lawyee/v2.2.1-aarch64/lawyee_ai-service_v2.2.1-aarch64.tar.gz {{ apps_dirs.ai_service }}/
+          echo "镜像文件迁移完成"
+        fi
+      when: lawyee_check.stat.exists
+      tags: [ai-service, migrate]
+
+    # ================================================
+    # 3. 更新ai-service配置
+    # ================================================
+    - name: 更新ai-service配置中的模型路径
+      lineinfile:
+        path: "{{ apps_dirs.ai_service }}/workspace/configs/model_collection.toml"
+        regexp: 'base_url = "http://10.10.1.10:8102/v1"'
+        line: 'base_url = "http://localhost:{{ service_ports.vllm }}/v1"'
+        state: present
+      ignore_errors: yes
+      tags: [ai-service, config]
+
+    - name: 显示ai-service迁移结果
+      debug:
+        msg:
+          - "ai-service文件已迁移到: {{ apps_dirs.ai_service }}"
+          - "docker-compose文件: {{ docker_dirs.compose }}/ai-service.yml"
+      tags: [ai-service, verify]
+
+- name: 迁移完成验证
+  hosts: aibox
+  become: yes
+  vars_files:
+    - ../group_vars/all.yml
+  
+  tasks:
+    - name: 验证Docker服务
+      command: docker ps -a
+      register: docker_containers
+      changed_when: false
+      tags: [verify]
+
+    - name: 验证目录结构
+      shell: |
+        echo "=== ksc_aibox目录 ==="
+        ls -la {{ ksc_aibox_root }}
+        echo ""
+        echo "=== models目录 ==="
+        ls -la {{ ksc_aibox_dirs.models }}
+        echo ""
+        echo "=== backup目录 ==="
+        ls -la {{ backup_root }}
+        echo ""
+        echo "=== Docker数据目录 ==="
+        ls -la {{ docker_dirs.data }} | head -10
+      register: final_verify
+      changed_when: false
+      tags: [verify]
+
+    - name: 显示迁移完成信息
+      debug:
+        msg:
+          - "=========================================="
+          - "数据迁移完成!"
+          - "=========================================="
+          - "Docker数据目录: {{ docker_dirs.data }}"
+          - "模型文件目录: {{ ksc_aibox_dirs.models }}"
+          - "应用文件目录: {{ apps_dirs.ai_service }}"
+          - "备份目录: {{ backup_root }}"
+          - "=========================================="
+          - "下一步: 执行03-install-k3s.yml安装K3s"
+      tags: [verify]

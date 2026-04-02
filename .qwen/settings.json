@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ssh-copy-id *)",
+      "Bash(mkdir *)",
+      "Bash(ansible *)",
+      "Bash(pip3 install *)",
+      "Bash(python3 *)",
+      "Bash(pip3 show *)",
+      "Bash(find *)",
+      "Bash(/library/frameworks/python.framework/versions/3.11/bin/ansible-inventory *)",
+      "Bash(/library/frameworks/python.framework/versions/3.11/bin/ansible-playbook *)",
+      "Bash(ssh *)",
+      "Bash(git branch *)",
+      "Bash(git init)",
+      "Bash(git checkout *)",
+      "Bash(git add *)"
+    ]
+  },
+  "$version": 3
+}
