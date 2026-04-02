@@ -1,0 +1,104 @@
+---
+# KSC AIBox 全局变量示例
+# 复制此文件到 ansible/group_vars/all.yml 并修改
+
+# ============================================
+# 项目基础配置
+# ============================================
+project_name: "ksc-aibox"
+project_version: "1.0.0"
+
+# ============================================
+# 目录配置
+# ============================================
+ksc_aibox_root: "/ksc_aibox"
+backup_root: "/backup"
+
+# 主要目录
+ksc_dirs:
+  apps: "{{ ksc_aibox_root }}/apps"
+  data: "{{ ksc_aibox_root }}/data"
+  models: "{{ ksc_aibox_root }}/models"
+  docker: "{{ ksc_aibox_root }}/docker"
+  k3s: "{{ ksc_aibox_root }}/k3s"
+  logs: "{{ ksc_aibox_root }}/logs"
+  scripts: "{{ ksc_aibox_root }}/scripts"
+  config: "{{ ksc_aibox_root }}/config"
+
+# ============================================
+# Docker配置
+# ============================================
+docker_data_dir: "{{ ksc_aibox_root }}/docker/data"
+docker_storage_driver: "overlay2"
+docker_log_max_size: "100m"
+docker_log_max_file: 3
+
+# ============================================
+# NPU配置
+# ============================================
+npu_devices:
+  - /dev/davinci0
+  - /dev/davinci1
+  - /dev/davinci2
+  - /dev/davinci3
+  - /dev/davinci_manager
+  - /dev/devmm_svm
+  - /dev/hisi_hdc
+
+npu_count: 4
+npu_memory_per_device: 64  # GB
+
+# ============================================
+# HugePages配置
+# ============================================
+hugepages_size: "2M"
+hugepages_count: 128000  # 256GB
+
+# ============================================
+# 网络配置
+# ============================================
+firewall_allowed_ports:
+  - "22/tcp"      # SSH
+  - "6443/tcp"    # K3s API
+  - "8102/tcp"    # vLLM
+  - "8122/tcp"    # AI Service
+  - "9000/tcp"    # MinIO API
+  - "9001/tcp"    # MinIO Console
+  - "9090/tcp"    # Prometheus
+  - "3000/tcp"    # Grafana
+  - "3306/tcp"    # MySQL
+  - "5432/tcp"    # PostgreSQL
+  - "6379/tcp"    # Redis
+  - "19530/tcp"   # Milvus
+  - "7687/tcp"    # Neo4j
+
+# ============================================
+# 数据库配置 (示例)
+# ============================================
+mysql_version: "8.0"
+mysql_data_dir: "{{ ksc_aibox_root }}/data/mysql"
+mysql_port: 3306
+
+postgres_version: "15"
+postgres_data_dir: "{{ ksc_aibox_root }}/data/postgres"
+postgres_port: 5432
+
+redis_version: "7"
+redis_data_dir: "{{ ksc_aibox_root }}/data/redis"
+redis_port: 6379
+
+# ============================================
+# 监控配置
+# ============================================
+prometheus_version: "2.45.0"
+prometheus_port: 9090
+prometheus_retention: "15d"
+
+grafana_version: "10.0.0"
+grafana_port: 3000
+
+# ============================================
+# 备份配置
+# ============================================
+backup_schedule: "0 2 * * *"  # 每天凌晨2点
+backup_retention_days: 30

@@ -16,7 +16,11 @@
       "Bash(git checkout *)",
       "Bash(git add *)",
       "Bash(git commit *)",
-      "Bash(git rm *)"
+      "Bash(git rm *)",
+      "Bash(rm *)",
+      "Bash(chmod *)",
+      "Bash(mv *)",
+      "Bash(true)"
     ]
   },
   "$version": 3

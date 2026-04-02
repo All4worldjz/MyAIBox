@@ -1,0 +1,23 @@
+{
+  "data-root": "/ksc_aibox/docker/data",
+  "storage-driver": "overlay2",
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "100m",
+    "max-file": "3"
+  },
+  "default-ulimits": {
+    "nofile": {
+      "Name": "nofile",
+      "Hard": 65535,
+      "Soft": 65535
+    }
+  },
+  "registry-mirrors": [
+    "https://mirror.example.com"
+  ],
+  "insecure-registries": [],
+  "live-restore": true,
+  "userland-proxy": false,
+  "bip": "172.17.0.1/16"
+}
