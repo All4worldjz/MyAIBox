@@ -20,7 +20,9 @@
       "Bash(rm *)",
       "Bash(chmod *)",
       "Bash(mv *)",
-      "Bash(true)"
+      "Bash(true)",
+      "Bash(tr *)",
+      "Bash(\"个) ===\")"
     ]
   },
   "$version": 3
