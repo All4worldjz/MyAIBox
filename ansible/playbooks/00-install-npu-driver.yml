@@ -1,0 +1,307 @@
+---
+# Playbook: 安装NPU驱动
+# 用于在远程服务器上安装华为昇腾NPU驱动
+# 执行时间: 约5-10分钟
+
+- name: 安装NPU驱动
+  hosts: aibox
+  become: yes
+  gather_facts: yes
+  vars_files:
+    - ../group_vars/all.yml
+
+  vars:
+    # NPU驱动文件路径（本地）
+    npu_driver_local_path: "{{ playbook_dir }}/../../drivers/NPU-910B/Ascend-hdk-910b-npu-driver-25.5.1-1.aarch64.rpm"
+    # NPU驱动文件路径（远程）
+    npu_driver_remote_path: "/tmp/Ascend-hdk-910b-npu-driver-25.5.1-1.aarch64.rpm"
+    # 驱动版本
+    npu_driver_version: "25.5.1"
+
+  tasks:
+    # ================================================
+    # 0. 安装必要的编译工具
+    # ================================================
+    - name: 安装gcc和其他编译工具
+      shell: |
+        # 获取当前内核版本
+        KERNEL_VERSION=$(uname -r)
+        echo "当前内核版本: $KERNEL_VERSION"
+        
+        # 安装与当前内核版本匹配的kernel-devel
+        yum install -y gcc make kernel-devel-${KERNEL_VERSION} kernel-headers-${KERNEL_VERSION}
+        echo "编译工具安装完成"
+      register: install_tools_result
+      changed_when: install_tools_result.stdout == "编译工具安装完成"
+      tags: [prepare, tools]
+
+    - name: 显示编译工具安装结果
+      debug:
+        msg: "{{ install_tools_result.stdout_lines }}"
+      when: install_tools_result.changed
+      tags: [prepare, tools]
+
+    - name: 验证内核构建目录
+      shell: |
+        KERNEL_VERSION=$(uname -r)
+        if [ -d "/lib/modules/${KERNEL_VERSION}/build" ]; then
+          echo "内核构建目录存在"
+          ls -la /lib/modules/${KERNEL_VERSION}/build | head -5
+        else
+          echo "警告: 内核构建目录不存在"
+        fi
+      register: kernel_build_check
+      changed_when: false
+      tags: [prepare, tools]
+
+    - name: 显示内核构建目录状态
+      debug:
+        msg: "{{ kernel_build_check.stdout_lines }}"
+      tags: [prepare, tools]
+
+    # ================================================
+    # 1. 检查当前NPU驱动状态
+    # ================================================
+    - name: 检查当前NPU驱动版本
+      shell: cat /usr/local/Ascend/version.info 2>/dev/null | grep version | cut -d= -f2
+      register: current_driver_version
+      changed_when: false
+      failed_when: false
+      tags: [check, driver]
+
+    - name: 显示当前驱动版本
+      debug:
+        msg: "当前NPU驱动版本: {{ current_driver_version.stdout | default('未安装') }}"
+      tags: [check, driver]
+
+    - name: 检查NPU设备状态
+      shell: npu-smi info -l 2>/dev/null | grep "Total Count" || echo "NPU设备未就绪"
+      register: npu_device_status
+      changed_when: false
+      failed_when: false
+      tags: [check, npu]
+
+    - name: 显示NPU设备状态
+      debug:
+        msg: "{{ npu_device_status.stdout }}"
+      tags: [check, npu]
+
+    # ================================================
+    # 2. 备份当前驱动（如果存在）
+    # ================================================
+    - name: 创建驱动备份目录
+      file:
+        path: "/backup/system/drivers"
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+      tags: [backup, driver]
+
+    - name: 备份当前驱动版本信息
+      shell: |
+        if [ -f /usr/local/Ascend/version.info ]; then
+          cp /usr/local/Ascend/version.info /backup/system/drivers/version.info.bak.{{ ansible_date_time.iso8601_basic }}
+          echo "驱动版本信息已备份"
+        else
+          echo "无现有驱动，跳过备份"
+        fi
+      register: backup_result
+      changed_when: backup_result.stdout == "驱动版本信息已备份"
+      tags: [backup, driver]
+
+    # ================================================
+    # 3. 复制驱动文件到远程服务器
+    # ================================================
+    - name: 检查本地驱动文件是否存在
+      stat:
+        path: "{{ npu_driver_local_path }}"
+      delegate_to: localhost
+      become: no
+      run_once: true
+      register: driver_file_check
+      tags: [copy, driver]
+
+    - name: 显示驱动文件信息
+      debug:
+        msg:
+          - "驱动文件路径: {{ npu_driver_local_path }}"
+          - "文件存在: {{ driver_file_check.stat.exists }}"
+          - "文件大小: {{ driver_file_check.stat.size | default(0) }} bytes"
+      tags: [copy, driver]
+
+    - name: 复制NPU驱动文件到远程服务器
+      copy:
+        src: "{{ npu_driver_local_path }}"
+        dest: "{{ npu_driver_remote_path }}"
+        mode: '0644'
+        owner: root
+        group: root
+      when: driver_file_check.stat.exists
+      tags: [copy, driver]
+
+    - name: 验证驱动文件已复制
+      stat:
+        path: "{{ npu_driver_remote_path }}"
+      register: remote_driver_check
+      tags: [copy, driver]
+
+    - name: 显示远程驱动文件信息
+      debug:
+        msg:
+          - "远程驱动文件存在: {{ remote_driver_check.stat.exists }}"
+          - "远程文件大小: {{ remote_driver_check.stat.size | default(0) }} bytes"
+      tags: [copy, driver]
+
+    # ================================================
+    # 4. 安装NPU驱动
+    # ================================================
+    - name: 检查是否需要安装驱动
+      set_fact:
+        need_install_driver: "{{ current_driver_version.stdout != npu_driver_version or current_driver_version.stdout == '' }}"
+      tags: [install, driver]
+
+    - name: 显示安装决策
+      debug:
+        msg:
+          - "当前版本: {{ current_driver_version.stdout | default('未安装') }}"
+          - "目标版本: {{ npu_driver_version }}"
+          - "需要安装: {{ need_install_driver }}"
+      tags: [install, driver]
+
+    - name: 卸载现有NPU驱动（如果存在）
+      shell: |
+        # 检查是否已安装驱动
+        if rpm -q Ascend910B-driver >/dev/null 2>&1; then
+          rpm -e Ascend910B-driver --nodeps
+          echo "驱动已卸载"
+        else
+          echo "无现有驱动"
+        fi
+      register: uninstall_result
+      tags: [install, driver]
+
+    - name: 显示卸载结果
+      debug:
+        msg: "{{ uninstall_result.stdout }}"
+      tags: [install, driver]
+
+    - name: 安装NPU驱动rpm包（非交互式）
+      shell: |
+        # 使用rpm命令直接安装，避免交互式输入
+        rpm -ivh {{ npu_driver_remote_path }} --nodeps --force
+        echo "驱动rpm包安装完成"
+      register: install_result
+      when: remote_driver_check.stat.exists
+      tags: [install, driver]
+
+    - name: 显示安装结果
+      debug:
+        msg: "{{ install_result.stdout_lines }}"
+      when: install_result is defined and install_result.changed
+      tags: [install, driver]
+
+    # ================================================
+    # 5. 验证驱动安装
+    # ================================================
+    - name: 验证驱动安装结果
+      shell: |
+        echo "=== 验证NPU驱动安装 ==="
+        echo ""
+        
+        # 检查驱动版本
+        if [ -f /usr/local/Ascend/version.info ]; then
+          echo "驱动版本文件存在"
+          cat /usr/local/Ascend/version.info
+        else
+          echo "警告: 驱动版本文件不存在"
+        fi
+        
+        echo ""
+        echo "=== NPU设备状态 ==="
+        npu-smi info -l 2>/dev/null || echo "npu-smi命令不可用"
+        
+        echo ""
+        echo "=== NPU设备文件 ==="
+        ls -la /dev/davinci* 2>/dev/null || echo "NPU设备文件不存在"
+      register: verify_result
+      changed_when: false
+      tags: [verify, driver]
+
+    - name: 显示验证结果
+      debug:
+        msg: "{{ verify_result.stdout_lines }}"
+      tags: [verify, driver]
+
+    # ================================================
+    # 6. 检查NPU健康状态
+    # ================================================
+    - name: 检查所有NPU健康状态
+      shell: |
+        echo "=== NPU健康检查 ==="
+        for i in 0 1 2 3; do
+          health=$(npu-smi info -t health -i $i -c 0 2>/dev/null | grep "Health Status" | awk '{print $NF}')
+          temp=$(npu-smi info -t temp -i $i -c 0 2>/dev/null | grep "Temperature" | awk '{print $NF}')
+          power=$(npu-smi info -t power -i $i -c 0 2>/dev/null | grep "Power" | awk '{print $NF}')
+          echo "NPU$i: Health=$health, Temp=$temp°C, Power=$power W"
+        done
+      register: npu_health_check
+      changed_when: false
+      failed_when: false
+      tags: [verify, npu]
+
+    - name: 显示NPU健康状态
+      debug:
+        msg: "{{ npu_health_check.stdout_lines }}"
+      tags: [verify, npu]
+
+    # ================================================
+    # 7. 清理临时文件
+    # ================================================
+    - name: 清理远程驱动文件
+      file:
+        path: "{{ npu_driver_remote_path }}"
+        state: absent
+      tags: [cleanup, driver]
+
+    # ================================================
+    # 8. 创建安装记录
+    # ================================================
+    - name: 创建驱动安装记录
+      copy:
+        dest: "/ksc_aibox/config/npu-driver-install.log"
+        content: |
+          NPU驱动安装记录
+          ==================
+          安装时间: {{ ansible_date_time.iso8601 }}
+          安装主机: {{ ansible_hostname }}
+          
+          驱动信息:
+          - 驱动版本: {{ npu_driver_version }}
+          - 驱动文件: {{ npu_driver_local_path }}
+          - 安装结果: {{ install_result.stdout | default('已存在，跳过安装') }}
+          
+          NPU设备状态:
+          {{ npu_health_check.stdout | default('NPU状态检查失败') }}
+          
+          验证结果:
+          {{ verify_result.stdout }}
+        mode: '0644'
+        owner: root
+        group: root
+      tags: [record, driver]
+
+  post_tasks:
+    - name: 安装完成提示
+      debug:
+        msg:
+          - "=========================================="
+          - "NPU驱动安装完成!"
+          - "=========================================="
+          - "驱动版本: {{ npu_driver_version }}"
+          - "安装记录: /ksc_aibox/config/npu-driver-install.log"
+          - "=========================================="
+          - "注意: 如需重启NPU服务，请执行:"
+          - "  systemctl restart ascend-driver"
+          - "=========================================="
+      tags: [always]

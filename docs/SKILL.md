@@ -791,6 +791,264 @@ mkswap /swapfile
 swapon /swapfile
 ```
 
+### 10.6 NPU驱动编译失败 - MIN/ALIGN_DOWN宏重定义
+
+#### 问题描述
+
+```bash
+# DKMS编译NPU驱动失败
+/var/lib/dkms/davinci_ascend/1.0/build/vascend_drv/kvmdt.c:62: 错误："MIN"重定义 [-Werror]
+/var/lib/dkms/davinci_ascend/1.0/build/dvpp_cmdlist/base/dvpp_cmdlist_define.h:11: 错误："ALIGN_DOWN"重定义 [-Werror]
+cc1：所有的警告都被当作是错误
+```
+
+#### 原因分析
+
+- openEuler 24.03 SP3内核6.6已定义MIN/ALIGN_DOWN宏
+- 华为NPU驱动源码重复定义这些宏
+- 内核编译选项`-Werror`将警告视为错误
+
+#### 解决方案
+
+```bash
+# 修改kvmdt.c - 添加条件编译
+sed -i "62i #ifndef MIN" /usr/src/davinci_ascend-1.0/vascend_drv/kvmdt.c
+sed -i "64i #endif" /usr/src/davinci_ascend-1.0/vascend_drv/kvmdt.c
+
+# 修改dvpp_cmdlist_define.h - 添加条件编译
+sed -i "10i #ifndef ALIGN_DOWN" /usr/src/davinci_ascend-1.0/dvpp_cmdlist/base/dvpp_cmdlist_define.h
+sed -i "12i #endif" /usr/src/davinci_ascend-1.0/dvpp_cmdlist/base/dvpp_cmdlist_define.h
+
+# 重新编译DKMS模块
+dkms build davinci_ascend/1.0
+dkms install davinci_ascend/1.0
+```
+
+#### 经验总结
+
+| 内核版本 | 问题 | 解决方案 |
+|----------|------|----------|
+| 6.6.0-72 (SP1) | 无 | 直接编译 |
+| 6.6.0-144 (SP3) | MIN/ALIGN_DOWN重定义 | 添加条件编译 |
+
+### 10.7 openEuler SP3升级后启动失败 - OOM Panic
+
+#### 问题描述
+
+```bash
+# 升级到SP3后重启，系统在启动早期OOM panic
+# 错误信息（通过串口console捕获）：
+Out of memory: Killed process 1 systemd
+Kernel panic - not syncing: Out of memory: No killable processes...
+```
+
+#### 原因分析
+
+- SP3内核新增UB（Unified Bus）核心功能，内置到内核
+- UB/USI在启动极早期（0.016秒）初始化
+- 新增内存相关配置：GMEM、MEMCG_QOS、MEM_SAMPLING等
+- 可能与特定硬件配置冲突导致内存分配失败
+
+#### SP3内核新增配置
+
+```
+CONFIG_UB=y                    # UB核心（内置）
+CONFIG_UB_UBUS=y               # UB总线（内置）
+CONFIG_UB_UBUS_USI=y           # UB USI接口（内置）
+CONFIG_UB_UMMU_CORE=y          # UB内存管理单元（内置）
+CONFIG_GMEM=y                  # Guest Memory
+CONFIG_MEMCG_QOS=y             # 内存控制组QoS
+CONFIG_MEM_SAMPLING=y          # 内存采样
+```
+
+#### 解决方案
+
+```bash
+# 1. 添加串口console参数，确保启动输出可见
+grubby --update-kernel=ALL --args="console=ttyAMA0,115200 console=tty0"
+
+# 2. 添加panic参数，OOM后自动重启
+grubby --update-kernel=ALL --args="panic=10"
+
+# 3. 如果问题持续，回退到SP1内核
+grubby --set-default=/boot/vmlinuz-6.6.0-72.0.0.76.oe2403sp1.aarch64
+```
+
+#### 经验总结
+
+| 现象 | 原因 | 解决方案 |
+|------|------|----------|
+| 启动早期OOM | SP3内核UB功能冲突 | 添加串口console观察，必要时回退SP1 |
+| 无启动输出 | 只有console=tty0 | 添加串口console=ttyAMA0,115200 |
+| 系统卡死 | panic=0不重启 | 添加panic=10自动重启 |
+
+### 10.8 multipath导致启动卡死
+
+#### 问题描述
+
+```bash
+# 系统启动到以下阶段后卡死
+Started Device-Mapper Multipath Device Controller
+Reached target Local File Systems
+Reached target Basic System
+Finished dracut pre-pivot and cleanup hook
+# 之后无响应，黑屏/无输出
+```
+
+#### 原因分析
+
+- 系统安装了multipath-tools但未正确配置
+- multipathd服务尝试管理NVMe设备
+- 单NVMe SSD不需要multipath
+- multipath可能在pivot_root阶段阻塞
+
+#### 解决方案
+
+```bash
+# 1. 创建multipath配置文件，黑名单所有设备
+cat > /etc/multipath.conf << 'EOF'
+# Disable multipath for all devices
+# This system uses single NVMe SSD, no multipath needed
+defaults {
+    user_friendly_names no
+    find_multipaths no
+}
+
+blacklist {
+    devnode "^.*"
+}
+EOF
+
+# 2. 禁用multipath服务
+systemctl disable multipathd
+systemctl disable multipathd.socket
+
+# 3. 创建modprobe黑名单
+echo "blacklist dm-multipath" > /etc/modprobe.d/blacklist-multipath.conf
+
+# 4. 创建dracut配置，禁用multipath模块
+cat > /etc/dracut.conf.d/no-multipath.conf << 'EOF'
+# Disable multipath in initramfs
+omit_dracutmodules+=" multipath "
+EOF
+
+# 5. 重新生成initramfs
+dracut -f --omit multipath /boot/initramfs-$(uname -r).img $(uname -r)
+```
+
+#### 验证配置
+
+```bash
+# 检查multipath服务状态
+systemctl is-enabled multipathd multipathd.socket
+# 应输出: disabled disabled
+
+# 检查multipath设备
+multipath -ll
+# 应无输出
+
+# 检查initramfs中是否包含multipath
+lsinitrd /boot/initramfs-$(uname -r).img | grep multipath
+# 应无输出或只有内核模块文件
+```
+
+### 10.9 串口console缺失导致无法诊断启动问题
+
+#### 问题描述
+
+```bash
+# 服务器重启后无显示输出
+# 只有console=tty0（VGA输出）
+# 服务器可能无连接显示器，无法看到启动过程
+```
+
+#### 原因分析
+
+- 默认内核参数只有`console=tty0`
+- 服务器通常通过串口管理（IPMI/BMC）
+- 无串口console无法捕获启动错误信息
+
+#### 解决方案
+
+```bash
+# 添加串口console参数
+grubby --update-kernel=ALL --args="console=ttyAMA0,115200 console=tty0"
+
+# 验证参数
+grubby --info=ALL | grep args
+```
+
+#### Console参数说明
+
+| 参数 | 说明 |
+|------|------|
+| `console=ttyAMA0,115200` | ARM PL011串口，波特率115200 |
+| `console=tty0` | VGA控制台 |
+| 多个console | 最后一个为主console，其他也会输出 |
+
+#### 经验总结
+
+```bash
+# 检查可用串口设备
+ls -la /dev/ttyAMA* /dev/ttyS*
+
+# ARM服务器通常使用ttyAMA0（PL011 UART）
+# x86服务器通常使用ttyS0（8250/16550 UART）
+
+# 查看当前console
+cat /proc/console
+# 输出: ttyAMA0
+```
+
+### 10.10 NPU驱动安装缺少依赖
+
+#### 问题描述
+
+```bash
+# NPU驱动安装失败
+[Driver] [ERROR] ERR_NO:0x0091; ERR_DES: HwHiAiUser not exists!
+[Driver] [ERROR] The list of missing tools: ifconfig,
+```
+
+#### 解决方案
+
+```bash
+# 1. 创建HwHiAiUser用户和组
+groupadd HwHiAiUser
+useradd -g HwHiAiUser -d /home/HwHiAiUser -m HwHiAiUser -s /bin/bash
+
+# 2. 安装net-tools（提供ifconfig）
+yum install -y net-tools
+
+# 3. 安装编译依赖
+yum install -y gcc make dkms kernel-devel kernel-headers
+```
+
+### 10.11 NPU驱动库路径未配置
+
+#### 问题描述
+
+```bash
+# npu-smi命令无法执行
+npu-smi: error while loading shared libraries: libc_sec.so: cannot open shared object file
+```
+
+#### 解决方案
+
+```bash
+# 创建环境变量配置文件
+cat > /etc/profile.d/ascend.sh << 'EOF'
+# Ascend NPU Environment
+export ASCEND_HOME_PATH=/usr/local/Ascend
+export ASCEND_DRIVER_PATH=/usr/local/Ascend/driver
+export LD_LIBRARY_PATH=/usr/local/Ascend/driver/lib64:/usr/local/Ascend/driver/lib64/common:/usr/local/Ascend/driver/lib64/driver:/usr/local/Ascend/driver/lib64/inner:$LD_LIBRARY_PATH
+export PATH=/usr/local/Ascend/bin:$PATH
+EOF
+
+# 加载环境变量
+source /etc/profile.d/ascend.sh
+```
+
 ---
 
 ## 11. 排错案例
