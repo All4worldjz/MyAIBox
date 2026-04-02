@@ -1,0 +1,186 @@
+---
+# Playbook: openEuler系统升级 (SP1 → SP3)
+# 警告: 系统升级有风险，建议先备份重要数据
+
+- name: openEuler系统升级到SP3
+  hosts: aibox
+  become: yes
+  gather_facts: yes
+  vars_files:
+    - ../group_vars/all.yml
+
+  tasks:
+    # ================================================
+    # 1. 升级前检查和备份
+    # ================================================
+    - name: 检查当前系统版本
+      shell: cat /etc/os-release | grep PRETTY_NAME
+      register: current_version
+      changed_when: false
+      tags: [check]
+
+    - name: 显示当前版本
+      debug:
+        msg: "当前系统: {{ current_version.stdout }}"
+      tags: [check]
+
+    - name: 检查磁盘空间
+      shell: df -h / | tail -1 | awk '{print $4}'
+      register: disk_space
+      changed_when: false
+      tags: [check]
+
+    - name: 验证磁盘空间充足
+      fail:
+        msg: "磁盘空间不足，需要至少10GB可用空间"
+      when: disk_space.stdout | regex_replace('[^0-9]', '') | int < 10
+      tags: [check]
+
+    - name: 备份重要配置文件
+      shell: |
+        BACKUP_DIR="/backup/pre-upgrade-$(date +%Y%m%d_%H%M%S)"
+        mkdir -p $BACKUP_DIR
+        cp -r /etc $BACKUP_DIR/etc
+        cp -r /var/lib/docker $BACKUP_DIR/docker 2>/dev/null || true
+        cp -r /usr/local/Ascend $BACKUP_DIR/ascend 2>/dev/null || true
+        echo $BACKUP_DIR
+      register: backup_dir
+      tags: [backup]
+
+    - name: 显示备份目录
+      debug:
+        msg: "配置已备份到: {{ backup_dir.stdout }}"
+      tags: [backup]
+
+    # ================================================
+    # 2. 更新软件源配置
+    # ================================================
+    - name: 备份原有软件源配置
+      shell: cp -r /etc/yum.repos.d /etc/yum.repos.d.bak.$(date +%Y%m%d)
+      tags: [repo]
+
+    - name: 更新软件源到SP3
+      shell: |
+        # 替换SP1为SP3
+        sed -i 's/24.03-LTS-SP1/24.03-LTS-SP3/g' /etc/yum.repos.d/openEuler.repo
+        sed -i 's/oe2403sp1/oe2403sp3/g' /etc/yum.repos.d/openEuler.repo
+      tags: [repo]
+
+    - name: 显示更新后的软件源
+      shell: cat /etc/yum.repos.d/openEuler.repo | grep -E 'baseurl|name=' | head -10
+      register: new_repo
+      changed_when: false
+      tags: [repo]
+
+    - name: 显示软件源配置
+      debug:
+        msg: "{{ new_repo.stdout_lines }}"
+      tags: [repo]
+
+    # ================================================
+    # 3. 清理和更新缓存
+    # ================================================
+    - name: 清理DNF缓存
+      command: dnf clean all
+      tags: [cache]
+
+    - name: 重建DNF缓存
+      command: dnf makecache
+      tags: [cache]
+
+    # ================================================
+    # 4. 系统升级
+    # ================================================
+    - name: 检查可用更新
+      shell: dnf check-update 2>/dev/null | wc -l
+      register: update_count
+      changed_when: false
+      tags: [upgrade]
+
+    - name: 显示更新数量
+      debug:
+        msg: "发现 {{ update_count.stdout }} 个可更新软件包"
+      tags: [upgrade]
+
+    - name: 执行系统升级 (这可能需要较长时间)
+      shell: |
+        dnf upgrade --refresh --releasever=24.03-LTS-SP3 -y
+      async: 3600
+      poll: 30
+      register: upgrade_result
+      tags: [upgrade]
+
+    - name: 显示升级结果
+      debug:
+        msg: "升级完成: {{ upgrade_result.stdout_lines | last }}"
+      when: upgrade_result.stdout_lines | length > 0
+      tags: [upgrade]
+
+    # ================================================
+    # 5. 升级后验证
+    # ================================================
+    - name: 检查新版本
+      shell: cat /etc/os-release | grep PRETTY_NAME
+      register: new_version
+      changed_when: false
+      tags: [verify]
+
+    - name: 显示新版本
+      debug:
+        msg: "升级后系统: {{ new_version.stdout }}"
+      tags: [verify]
+
+    - name: 检查内核版本
+      shell: uname -r
+      register: new_kernel
+      changed_when: false
+      tags: [verify]
+
+    - name: 显示内核版本
+      debug:
+        msg: "内核版本: {{ new_kernel.stdout }}"
+      tags: [verify]
+
+    - name: 检查关键服务状态
+      shell: |
+        for svc in docker sshd firewalld; do
+          echo "$svc: $(systemctl is-active $svc)"
+        done
+      register: service_status
+      changed_when: false
+      tags: [verify]
+
+    - name: 显示服务状态
+      debug:
+        msg: "{{ service_status.stdout_lines }}"
+      tags: [verify]
+
+    - name: 检查NPU状态
+      shell: npu-smi info -l 2>/dev/null | grep "Total Count"
+      register: npu_status
+      changed_when: false
+      ignore_errors: yes
+      tags: [verify]
+
+    - name: 显示NPU状态
+      debug:
+        msg: "{{ npu_status.stdout }}"
+      when: npu_status.stdout is defined
+      tags: [verify]
+
+  post_tasks:
+    - name: 升级完成提示
+      debug:
+        msg:
+          - "=========================================="
+          - "系统升级完成!"
+          - "=========================================="
+          - "升级前: {{ current_version.stdout }}"
+          - "升级后: {{ new_version.stdout }}"
+          - "=========================================="
+          - "重要提示:"
+          - "1. 建议重启系统以加载新内核"
+          - "2. 验证所有服务正常运行"
+          - "3. 检查NPU驱动兼容性"
+          - "=========================================="
+      tags: [always]

@@ -22,7 +22,9 @@
       "Bash(mv *)",
       "Bash(true)",
       "Bash(tr *)",
-      "Bash(\"个) ===\")"
+      "Bash(\"个) ===\")",
+      "Bash(file *)",
+      "Bash(unzip *)"
     ]
   },
   "$version": 3
