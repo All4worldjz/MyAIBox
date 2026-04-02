@@ -86,13 +86,35 @@ id HwHiAiUser
 
 ### 2.4 准备驱动文件
 
+> ⚠️ **重要提醒：必须下载ZIP文件包**
+>
+> 从华为昇腾社区下载驱动时，**务必下载ZIP压缩包**（如`Ascend-hdk-910b-npu_25.5.1_linux-aarch64.zip`），**不要单独下载.run文件**。
+>
+> **原因**：
+> - ZIP包包含完整的驱动和固件文件
+> - ZIP包内的.run文件经过正确打包和签名
+> - 单独下载的.run文件可能不完整或版本不匹配
+> - ZIP包通常包含安装脚本和文档
+>
+> **下载地址**：https://www.hiascend.com/software/cann/community
+>
+> **下载步骤**：
+> 1. 选择对应的产品型号（Ascend 910B）
+> 2. 选择操作系统（openEuler aarch64）
+> 3. 下载ZIP格式的驱动包
+> 4. 解压后使用其中的.run文件
+
 ```bash
-# 驱动文件位置
+# 驱动文件位置（解压后）
 drivers/NPU-910B/Ascend-hdk-910b-npu_25/Ascend-hdk-910b-npu_25.5.1_linux-aarch64/
 
 # 关键文件
 # - Ascend-hdk-910b-npu-driver_25.5.1_linux-aarch64.run (驱动包)
 # - Ascend-hdk-910b-npu-firmware_7.8.0.6.201.run (固件包)
+# - install.sh (安装脚本，可选)
+
+# 解压ZIP包
+unzip Ascend-hdk-910b-npu_25.5.1_linux-aarch64.zip -d /path/to/drivers/
 ```
 
 ---
