@@ -1,0 +1,336 @@
+---
+# Huawei Ascend 910B vLLM 安装 Playbook
+# 支持在Ascend NPU上部署vLLM推理服务
+#
+# 使用方法:
+#   ansible-playbook -i inventory-npu.ini playbooks/02-install-vllm.yml
+
+- name: Install vLLM for Ascend NPU
+  hosts: npu_servers
+  become: yes
+  gather_facts: yes
+  vars:
+    # 模型配置
+    models_dir: "/ksc_aibox/models"
+    llm_models:
+      - name: "DeepSeek-R1"
+        repo_id: "deepseek-ai/DeepSeek-R1"
+        size: "70B"
+      - name: "DeepSeek-V2"
+        repo_id: "deepseek-ai/DeepSeek-V2-Chat"
+        size: "21B"
+      - name: "Qwen2.5-72B"
+        repo_id: "Qwen/Qwen2.5-72B-Instruct"
+        size: "72B"
+      - name: "Qwen2.5-32B"
+        repo_id: "Qwen/Qwen2.5-32B-Instruct"
+        size: "32B"
+      - name: "Qwen2.5-14B"
+        repo_id: "Qwen/Qwen2.5-14B-Instruct"
+        size: "14B"
+      - name: "Qwen2.5-7B"
+        repo_id: "Qwen/Qwen2.5-7B-Instruct"
+        size: "7B"
+    
+    embedding_models:
+      - name: "bge-m3"
+        repo_id: "BAAI/bge-m3"
+        size: "500M"
+      - name: "bge-large-zh-v1.5"
+        repo_id: "BAAI/bge-large-zh-v1.5"
+        size: "400M"
+    
+    vl_models:
+      - name: "Qwen2-VL-72B"
+        repo_id: "Qwen/Qwen2-VL-72B-Instruct"
+        size: "72B"
+      - name: "Qwen2-VL-7B"
+        repo_id: "Qwen/Qwen2-VL-7B-Instruct"
+        size: "7B"
+    
+    # vLLM配置
+    vllm_port: 8000
+    vllm_gpu_memory_utilization: 0.9
+    vllm_max_model_len: 8192
+    vllm_tensor_parallel_size: 2
+    
+    # Docker配置
+    docker_data_root: "/ksc_aibox/docker/data"
+    ascend_toolkit_path: "/usr/local/Ascend/cann"
+
+  tasks:
+    # ============================================================
+    # 阶段 1: 环境准备
+    # ============================================================
+    - name: Create model directories
+      file:
+        path: "{{ models_dir }}/{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - "llm"
+        - "embedding"
+        - "vl"
+        - "rerank"
+        - "mineru"
+
+    - name: Check if HuggingFace CLI is available
+      shell: |
+        which huggingface-cli || which hf-cli || echo "not_found"
+      register: hf_cli_check
+      changed_when: false
+
+    - name: Install HuggingFace CLI if needed
+      pip:
+        name: huggingface-hub
+        state: present
+      when: hf_cli_check.stdout == "not_found"
+
+    - name: Source Ascend CANN environment
+      shell: |
+        source {{ ascend_toolkit_path }}/set_env.sh 2>/dev/null || true
+        echo "CANN environment loaded"
+      register: cann_env_check
+      changed_when: false
+
+    # ============================================================
+    # 阶段 2: 下载模型文件
+    # ============================================================
+    - name: Download LLM models
+      shell: |
+        mkdir -p {{ models_dir }}/llm/{{ item.name }}
+        cd {{ models_dir }}/llm/{{ item.name }}
+        
+        # 使用huggingface-cli下载
+        if command -v huggingface-cli >/dev/null 2>&1; then
+          huggingface-cli download {{ item.repo_id }} --local-dir ./{{ item.name }}
+        elif command -v python3 >/dev/null 2>&1; then
+          python3 -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='{{ item.repo_id }}', local_dir='./{{ item.name }}')"
+        fi
+        
+        echo "Downloaded {{ item.name }}"
+      loop: "{{ llm_models }}"
+      ignore_errors: yes
+      register: llm_download_results
+
+    - name: Download embedding models
+      shell: |
+        mkdir -p {{ models_dir }}/embedding/{{ item.name }}
+        cd {{ models_dir }}/embedding/{{ item.name }}
+        
+        if command -v huggingface-cli >/dev/null 2>&1; then
+          huggingface-cli download {{ item.repo_id }} --local-dir ./{{ item.name }}
+        elif command -v python3 >/dev/null 2>&1; then
+          python3 -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='{{ item.repo_id }}', local_dir='./{{ item.name }}')"
+        fi
+        
+        echo "Downloaded {{ item.name }}"
+      loop: "{{ embedding_models }}"
+      ignore_errors: yes
+
+    - name: Download VL models
+      shell: |
+        mkdir -p {{ models_dir }}/vl/{{ item.name }}
+        cd {{ models_dir }}/vl/{{ item.name }}
+        
+        if command -v huggingface-cli >/dev/null 2>&1; then
+          huggingface-cli download {{ item.repo_id }} --local-dir ./{{ item.name }}
+        elif command -v python3 >/dev/null 2>&1; then
+          python3 -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='{{ item.repo_id }}', local_dir='./{{ item.name }}')"
+        fi
+        
+        echo "Downloaded {{ item.name }}"
+      loop: "{{ vl_models }}"
+      ignore_errors: yes
+
+    # ============================================================
+    # 阶段 3: 创建vLLM Docker配置
+    # ============================================================
+    - name: Create vLLM startup script
+      copy:
+        dest: "/ksc_aibox/scripts/vllm/start-vllm.sh"
+        content: |
+          #!/bin/bash
+          # vLLM for Ascend NPU 启动脚本
+          
+          set -e
+          
+          # 加载CANN环境
+          source /usr/local/Ascend/cann/set_env.sh
+          
+          # 模型配置
+          MODEL_NAME=${1:-"Qwen2.5-7B-Instruct"}
+          MODEL_PATH="/ksc_aibox/models/llm/${MODEL_NAME}"
+          PORT=${2:-8000}
+          
+          # NPU设备
+          NPU_DEVICES="--device /dev/davinci0,/dev/davinci1,/dev/davinci2,/dev/davinci3"
+          
+          echo "Starting vLLM with model: ${MODEL_NAME}"
+          echo "Model path: ${MODEL_PATH}"
+          echo "Port: ${PORT}"
+          
+          # 检查模型是否存在
+          if [ ! -d "${MODEL_PATH}" ]; then
+            echo "Error: Model not found at ${MODEL_PATH}"
+            exit 1
+          fi
+          
+          # 启动vLLM容器
+          docker run -d \
+            --name vllm-ascend-${MODEL_NAME} \
+            --net host \
+            --shm-size=32g \
+            ${NPU_DEVICES} \
+            -v ${MODEL_PATH}:/model \
+            -v /usr/local/Ascend:/usr/local/Ascend:ro \
+            -e ASCEND_INSTALL_PATH=/usr/local/Ascend \
+            -e LD_LIBRARY_PATH=/usr/local/Ascend/cann/lib64:$LD_LIBRARY_PATH \
+            -p ${PORT}:8000 \
+            vllm-ascend \
+            --model /model \
+            --tensor-parallel-size 4 \
+            --gpu-memory-utilization 0.9 \
+            --max-model-len 8192 \
+            --host 0.0.0.0 \
+            --port 8000
+          
+          echo "vLLM started successfully"
+        mode: '0755'
+
+    - name: Create vLLM Docker directory
+      file:
+        path: "/ksc_aibox/scripts/vllm"
+        state: directory
+        mode: '0755'
+
+    # ============================================================
+    # 阶段 4: 配置NPU设备权限
+    # ============================================================
+    - name: Create udev rules for NPU devices
+      copy:
+        dest: "/etc/udev/rules.d/99-npu.rules"
+        content: |
+          # NPU device permissions
+          SUBSYSTEM=="misc", KERNEL=="davinci_manager", MODE="0666", GROUP="docker"
+          SUBSYSTEM=="misc", KERNEL=="davinci[0-9]", MODE="0666", GROUP="docker"
+        mode: '0644'
+
+    - name: Reload udev rules
+      shell: |
+        udevadm control --reload-rules
+        udevadm trigger
+      ignore_errors: yes
+
+    # ============================================================
+    # 阶段 5: 验证安装
+    # ============================================================
+    - name: Check model directories
+      shell: |
+        echo "=== Model directories ==="
+        du -sh {{ models_dir }}/*
+        
+        echo ""
+        echo "=== LLM models ==="
+        ls -la {{ models_dir }}/llm/ 2>/dev/null || echo "No LLM models"
+        
+        echo ""
+        echo "=== Embedding models ==="
+        ls -la {{ models_dir }}/embedding/ 2>/dev/null || echo "No embedding models"
+        
+        echo ""
+        echo "=== VL models ==="
+        ls -la {{ models_dir }}/vl/ 2>/dev/null || echo "No VL models"
+      register: model_check
+      changed_when: false
+
+    - name: Display installation summary
+      debug:
+        msg:
+          - "=============================================="
+          - "vLLM Installation Summary"
+          - "=============================================="
+          - "Models directory: {{ models_dir }}"
+          - "vLLM startup script: /ksc_aibox/scripts/vllm/start-vllm.sh"
+          - ""
+          - "To start vLLM:"
+          - "  /ksc_aibox/scripts/vllm/start-vllm.sh Qwen2.5-7B-Instruct 8000"
+          - ""
+          - "Model download results:"
+          - "{{ llm_download_results.results | map(attribute='stdout') | list }}"
+          - "=============================================="
+
+    # ============================================================
+    # 阶段 6: 创建快速启动脚本
+    # ============================================================
+    - name: Create model list script
+      copy:
+        dest: "/ksc_aibox/scripts/vllm/list-models.sh"
+        content: |
+          #!/bin/bash
+          # 列出已下载的模型
+          
+          MODELS_DIR="/ksc_aibox/models"
+          
+          echo "=== Available Models ==="
+          echo ""
+          echo "LLM Models:"
+          ls -1 ${MODELS_DIR}/llm/ 2>/dev/null || echo "  No LLM models downloaded"
+          
+          echo ""
+          echo "Embedding Models:"
+          ls -1 ${MODELS_DIR}/embedding/ 2>/dev/null || echo "  No embedding models downloaded"
+          
+          echo ""
+          echo "VL Models:"
+          ls -1 ${MODELS_DIR}/vl/ 2>/dev/null || echo "  No VL models downloaded"
+          
+          echo ""
+          echo "=== Disk Usage ==="
+          du -sh ${MODELS_DIR}/*
+        mode: '0755'
+
+    - name: Create vLLM service management script
+      copy:
+        dest: "/ksc_aibox/scripts/vllm/manage-vllm.sh"
+        content: |
+          #!/bin/bash
+          # vLLM服务管理脚本
+          
+          case "$1" in
+            start)
+              MODEL=${2:-"Qwen2.5-7B-Instruct"}
+              PORT=${3:-8000}
+              /ksc_aibox/scripts/vllm/start-vllm.sh ${MODEL} ${PORT}
+              ;;
+            stop)
+              docker stop vllm-ascend-* 2>/dev/null || echo "No vLLM containers running"
+              ;;
+            restart)
+              $0 stop
+              sleep 2
+              $0 start $2 $3
+              ;;
+            list)
+              docker ps -a --filter "name=vllm-ascend"
+              ;;
+            logs)
+              CONTAINER=$(docker ps -a --filter "name=vllm-ascend" --format "{{.Names}}" | head -1)
+              if [ -n "$CONTAINER" ]; then
+                docker logs -f ${CONTAINER}
+              else
+                echo "No vLLM container found"
+              fi
+              ;;
+            *)
+              echo "Usage: $0 {start|stop|restart|list|logs} [model] [port]"
+              echo ""
+              echo "Examples:"
+              echo "  $0 start Qwen2.5-7B-Instruct 8000"
+              echo "  $0 stop"
+              echo "  $0 list"
+              echo "  $0 logs"
+              exit 1
+              ;;
+          esac
+        mode: '0755'
