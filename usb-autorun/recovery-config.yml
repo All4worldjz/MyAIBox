@@ -1,0 +1,74 @@
+# KSC AIBox 系统恢复配置文件
+# ================================================
+# 用于自定义恢复行为
+
+# 执行模式
+# - shell: 仅使用Shell脚本执行
+# - ansible: 仅使用Ansible playbook执行
+# - both: 两种方式都执行（先Shell后Ansible）
+exec_mode: shell
+
+# 执行步骤
+# - all: 执行所有步骤
+# - dirs: 仅创建目录结构
+# - system: 仅系统优化
+# - npu: 仅NPU配置
+# - docker: 仅Docker配置
+# - scripts: 仅创建监控脚本
+# - verify: 仅验证
+# 可组合使用，如: dirs,system,npu
+steps: all
+
+# 目录配置
+ksc_aibox_root: /ksc_aibox
+backup_root: /backup
+
+# NPU配置
+npu:
+  hugepages: 128000
+  devices:
+    - davinci0
+    - davinci1
+    - davinci2
+    - davinci3
+
+# Docker配置
+docker:
+  data_root: /ksc_aibox/docker/data
+  storage_driver: overlay2
+  log_max_size: 100m
+  log_max_file: 3
+
+# 系统优化配置
+system:
+  hostname: ksc-aibox-node01
+  timezone: Asia/Shanghai
+  locale: zh_CN.UTF-8
+
+# 防火墙端口
+firewall_ports:
+  - 6443/tcp   # K3s API
+  - 9000/tcp   # MinIO API
+  - 9001/tcp   # MinIO Console
+  - 9090/tcp   # Prometheus
+  - 3000/tcp   # Grafana
+  - 3306/tcp   # MySQL
+  - 5432/tcp   # PostgreSQL
+  - 6379/tcp   # Redis
+  - 19530/tcp  # Milvus
+  - 7687/tcp   # Neo4j
+
+# 健康检查配置
+health_check:
+  interval: 5m  # 每5分钟检查一次
+  log_file: /ksc_aibox/logs/health-check.log
+
+# 自愈配置
+self_healing:
+  enabled: true
+  interval: 10m  # 每10分钟自愈检查
+  services:
+    - docker
+    - sshd
+    - firewalld
+    - chronyd

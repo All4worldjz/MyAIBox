@@ -1,0 +1,713 @@
+---
+# Playbook: KSC AIBox 系统恢复
+# 用于系统恢复后自动执行必要配置
+# 版本: 1.0.0
+
+- name: KSC AIBox 系统恢复 - 目录结构创建
+  hosts: aibox
+  become: yes
+  gather_facts: yes
+  vars:
+    ksc_aibox_root: /ksc_aibox
+    backup_root: /backup
+    steps: all
+
+  pre_tasks:
+    - name: 显示恢复信息
+      debug:
+        msg:
+          - "=========================================="
+          - "KSC AIBox 系统恢复"
+          - "=========================================="
+          - "应用目录: {{ ksc_aibox_root }}"
+          - "备份目录: {{ backup_root }}"
+          - "执行步骤: {{ steps }}"
+          - "=========================================="
+
+  tasks:
+    # ================================================
+    # 步骤1: 创建目录结构
+    # ================================================
+    - name: 创建ksc_aibox主目录
+      file:
+        path: "{{ ksc_aibox_root }}"
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+      when: steps == 'all' or 'dirs' in steps
+      tags: [dirs, always]
+
+    - name: 创建ksc_aibox一级子目录
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+      loop:
+        - "{{ ksc_aibox_root }}/apps"
+        - "{{ ksc_aibox_root }}/data"
+        - "{{ ksc_aibox_root }}/models"
+        - "{{ ksc_aibox_root }}/k3s"
+        - "{{ ksc_aibox_root }}/docker"
+        - "{{ ksc_aibox_root }}/logs"
+        - "{{ ksc_aibox_root }}/scripts"
+        - "{{ ksc_aibox_root }}/config"
+        - "{{ ksc_aibox_root }}/tmp"
+      when: steps == 'all' or 'dirs' in steps
+      tags: [dirs]
+
+    - name: 创建apps应用子目录
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+      loop:
+        - "{{ ksc_aibox_root }}/apps/ascend"
+        - "{{ ksc_aibox_root }}/apps/vllm"
+        - "{{ ksc_aibox_root }}/apps/vllm/config"
+        - "{{ ksc_aibox_root }}/apps/vllm/logs"
+        - "{{ ksc_aibox_root }}/apps/vllm/scripts"
+        - "{{ ksc_aibox_root }}/apps/ai-service"
+        - "{{ ksc_aibox_root }}/apps/ai-service/workspace"
+        - "{{ ksc_aibox_root }}/apps/ai-service/config"
+        - "{{ ksc_aibox_root }}/apps/ai-service/logs"
+        - "{{ ksc_aibox_root }}/apps/custom"
+      when: steps == 'all' or 'dirs' in steps
+      tags: [dirs, apps]
+
+    - name: 创建data数据库子目录
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+      loop:
+        - "{{ ksc_aibox_root }}/data/mysql"
+        - "{{ ksc_aibox_root }}/data/postgres"
+        - "{{ ksc_aibox_root }}/data/redis"
+        - "{{ ksc_aibox_root }}/data/milvus"
+        - "{{ ksc_aibox_root }}/data/neo4j"
+        - "{{ ksc_aibox_root }}/data/minio"
+      when: steps == 'all' or 'dirs' in steps
+      tags: [dirs, data]
+
+    - name: 创建models模型子目录
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+      loop:
+        - "{{ ksc_aibox_root }}/models/llm"
+        - "{{ ksc_aibox_root }}/models/embedding"
+        - "{{ ksc_aibox_root }}/models/rerank"
+        - "{{ ksc_aibox_root }}/models/vl"
+        - "{{ ksc_aibox_root }}/models/mineru"
+      when: steps == 'all' or 'dirs' in steps
+      tags: [dirs, models]
+
+    - name: 创建k3s子目录
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+      loop:
+        - "{{ ksc_aibox_root }}/k3s/data"
+        - "{{ ksc_aibox_root }}/k3s/storage"
+        - "{{ ksc_aibox_root }}/k3s/manifests"
+        - "{{ ksc_aibox_root }}/k3s/helm"
+        - "{{ ksc_aibox_root }}/k3s/kubeconfig"
+      when: steps == 'all' or 'dirs' in steps
+      tags: [dirs, k3s]
+
+    - name: 创建docker子目录
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+      loop:
+        - "{{ ksc_aibox_root }}/docker/data"
+        - "{{ ksc_aibox_root }}/docker/compose"
+        - "{{ ksc_aibox_root }}/docker/config"
+        - "{{ ksc_aibox_root }}/docker/scripts"
+      when: steps == 'all' or 'dirs' in steps
+      tags: [dirs, docker]
+
+    - name: 创建logs日志子目录
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+      loop:
+        - "{{ ksc_aibox_root }}/logs/vllm"
+        - "{{ ksc_aibox_root }}/logs/ai-service"
+        - "{{ ksc_aibox_root }}/logs/k3s"
+        - "{{ ksc_aibox_root }}/logs/mysql"
+        - "{{ ksc_aibox_root }}/logs/postgres"
+        - "{{ ksc_aibox_root }}/logs/redis"
+        - "{{ ksc_aibox_root }}/logs/milvus"
+        - "{{ ksc_aibox_root }}/logs/neo4j"
+        - "{{ ksc_aibox_root }}/logs/system"
+      when: steps == 'all' or 'dirs' in steps
+      tags: [dirs, logs]
+
+    - name: 创建scripts脚本子目录
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+      loop:
+        - "{{ ksc_aibox_root }}/scripts/install"
+        - "{{ ksc_aibox_root }}/scripts/backup"
+        - "{{ ksc_aibox_root }}/scripts/restore"
+        - "{{ ksc_aibox_root }}/scripts/monitor"
+        - "{{ ksc_aibox_root }}/scripts/maintenance"
+      when: steps == 'all' or 'dirs' in steps
+      tags: [dirs, scripts]
+
+    - name: 创建config配置子目录
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+      loop:
+        - "{{ ksc_aibox_root }}/config/ansible"
+        - "{{ ksc_aibox_root }}/config/env"
+        - "{{ ksc_aibox_root }}/config/secrets"
+        - "{{ ksc_aibox_root }}/config/systemd"
+      when: steps == 'all' or 'dirs' in steps
+      tags: [dirs, config]
+
+    - name: 创建backup主目录
+      file:
+        path: "{{ backup_root }}"
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+      when: steps == 'all' or 'dirs' in steps
+      tags: [dirs, backup]
+
+    - name: 创建backup子目录
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+      loop:
+        - "{{ backup_root }}/system"
+        - "{{ backup_root }}/system/root_fs"
+        - "{{ backup_root }}/system/config"
+        - "{{ backup_root }}/system/config/etc"
+        - "{{ backup_root }}/system/config/fstab"
+        - "{{ backup_root }}/system/config/systemd"
+        - "{{ backup_root }}/system/packages"
+        - "{{ backup_root }}/application"
+        - "{{ backup_root }}/application/ksc_aibox"
+        - "{{ backup_root }}/application/databases"
+        - "{{ backup_root }}/application/databases/mysql"
+        - "{{ backup_root }}/application/databases/postgres"
+        - "{{ backup_root }}/application/databases/milvus"
+        - "{{ backup_root }}/application/databases/neo4j"
+        - "{{ backup_root }}/application/models"
+        - "{{ backup_root }}/application/docker"
+        - "{{ backup_root }}/archive"
+        - "{{ backup_root }}/archive/monthly"
+        - "{{ backup_root }}/archive/yearly"
+        - "{{ backup_root }}/logs"
+      when: steps == 'all' or 'dirs' in steps
+      tags: [dirs, backup]
+
+    # ================================================
+    # 步骤2: 系统优化
+    # ================================================
+    - name: 设置主机名
+      hostname:
+        name: "ksc-aibox-node01"
+      when: steps == 'all' or 'system' in steps
+      tags: [system, hostname]
+
+    - name: 更新/etc/hosts
+      lineinfile:
+        path: /etc/hosts
+        regexp: '^127\.0\.0\.1'
+        line: "127.0.0.1   localhost localhost.localdomain ksc-aibox-node01"
+        state: present
+      when: steps == 'all' or 'system' in steps
+      tags: [system, hostname]
+
+    - name: 创建系统优化sysctl配置
+      copy:
+        dest: /etc/sysctl.d/99-ksc-aibox-optimization.conf
+        content: |
+          # KSC AIBox 系统优化配置
+          # === 网络优化 ===
+          net.core.somaxconn = 65535
+          net.ipv4.tcp_tw_reuse = 1
+          net.ipv4.tcp_fin_timeout = 30
+          net.ipv4.ip_local_port_range = 1024 65535
+          net.ipv4.tcp_max_syn_backlog = 65535
+          net.ipv4.tcp_syncookies = 1
+          net.ipv4.tcp_keepalive_time = 600
+          net.ipv4.tcp_keepalive_intvl = 30
+          net.ipv4.tcp_keepalive_probes = 3
+          net.ipv4.tcp_max_tw_buckets = 65535
+          # === 内存优化 ===
+          vm.swappiness = 10
+          vm.dirty_ratio = 40
+          vm.dirty_background_ratio = 10
+          vm.overcommit_memory = 1
+          vm.max_map_count = 262144
+          vm.min_free_kbytes = 1048576
+          # === 文件系统 ===
+          fs.file-max = 2097152
+          fs.nr_open = 2097152
+          fs.aio-max-nr = 1048576
+          # === 内核信号 ===
+          kernel.sem = 250 32000 100 1024
+          kernel.pid_max = 4194304
+          # === 共享内存 ===
+          kernel.shmmax = 68719476736
+          kernel.shmall = 4294967296
+          # === 鲲鹏网络优化 ===
+          net.core.rmem_max = 134217728
+          net.core.wmem_max = 134217728
+          net.core.rmem_default = 16777216
+          net.core.wmem_default = 16777216
+          net.core.optmem_max = 16777216
+          net.ipv4.tcp_rmem = 4096 87380 134217728
+          net.ipv4.tcp_wmem = 4096 65536 134217728
+          net.core.netdev_max_backlog = 30000
+        mode: '0644'
+        owner: root
+        group: root
+      when: steps == 'all' or 'system' in steps
+      tags: [system, kernel]
+
+    - name: 应用sysctl配置
+      command: sysctl -p /etc/sysctl.d/99-ksc-aibox-optimization.conf
+      when: steps == 'all' or 'system' in steps
+      tags: [system, kernel]
+
+    - name: 配置系统资源限制
+      copy:
+        dest: /etc/security/limits.d/99-ksc-aibox.conf
+        content: |
+          # KSC AIBox 资源限制配置
+          *    soft    nofile    655350
+          *    hard    nofile    655350
+          root soft    nofile    655350
+          root hard    nofile    655350
+          *    soft    nproc     655350
+          *    hard    nproc     655350
+          root soft    nproc     655350
+          root hard    nproc     655350
+          *    soft    memlock   unlimited
+          *    hard    memlock   unlimited
+          root soft    memlock   unlimited
+          root hard    memlock   unlimited
+          *    soft    stack     unlimited
+          *    hard    stack     unlimited
+        mode: '0644'
+        owner: root
+        group: root
+      when: steps == 'all' or 'system' in steps
+      tags: [system, limits]
+
+    - name: 禁用不必要的服务
+      systemd:
+        name: "{{ item }}"
+        state: stopped
+        enabled: no
+      loop:
+        - bluetooth.service
+        - cups.service
+        - avahi-daemon.service
+        - ModemManager.service
+      failed_when: false
+      when: steps == 'all' or 'system' in steps
+      tags: [system, services]
+
+    - name: 配置tuned性能模式
+      command: tuned-adm profile accelerator-performance
+      when: steps == 'all' or 'system' in steps
+      tags: [system, tuned]
+
+    - name: SSH安全加固配置
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+        state: present
+      loop:
+        - { regexp: '^#?PermitRootLogin', line: 'PermitRootLogin prohibit-password' }
+        - { regexp: '^#?MaxAuthTries', line: 'MaxAuthTries 3' }
+        - { regexp: '^#?ClientAliveInterval', line: 'ClientAliveInterval 300' }
+        - { regexp: '^#?ClientAliveCountMax', line: 'ClientAliveCountMax 2' }
+      when: steps == 'all' or 'system' in steps
+      tags: [system, ssh]
+
+    - name: 重载SSH服务
+      systemd:
+        name: sshd
+        state: reloaded
+      when: steps == 'all' or 'system' in steps
+      tags: [system, ssh]
+
+    - name: 配置防火墙默认区域
+      command: firewall-cmd --set-default-zone=public
+      when: steps == 'all' or 'system' in steps
+      tags: [system, firewall]
+
+    - name: 开放必要端口
+      firewalld:
+        port: "{{ item }}"
+        permanent: yes
+        state: enabled
+        immediate: yes
+      loop:
+        - "6443/tcp"
+        - "9000/tcp"
+        - "9001/tcp"
+        - "9090/tcp"
+        - "3000/tcp"
+        - "3306/tcp"
+        - "5432/tcp"
+        - "6379/tcp"
+        - "19530/tcp"
+        - "7687/tcp"
+      when: steps == 'all' or 'system' in steps
+      tags: [system, firewall]
+
+    # ================================================
+    # 步骤3: NPU配置
+    # ================================================
+    - name: 配置HugePages
+      sysctl:
+        name: vm.nr_hugepages
+        value: "128000"
+        state: present
+        reload: yes
+        sysctl_file: /etc/sysctl.d/99-ksc-aibox-hugepages.conf
+      when: steps == 'all' or 'npu' in steps
+      tags: [npu, hugepages]
+
+    - name: 创建NPU设备权限配置
+      copy:
+        dest: /etc/udev/rules.d/99-npu.rules
+        content: |
+          # NPU设备权限配置
+          KERNEL=="davinci[0-9]*", MODE="0666"
+          KERNEL=="davinci_manager", MODE="0666"
+          KERNEL=="devmm_svm", MODE="0666"
+          KERNEL=="hisi_hdc", MODE="0666"
+        mode: '0644'
+        owner: root
+        group: root
+      when: steps == 'all' or 'npu' in steps
+      tags: [npu, udev]
+
+    - name: 重载udev规则
+      command: udevadm control --reload-rules
+      when: steps == 'all' or 'npu' in steps
+      tags: [npu, udev]
+
+    - name: 创建NPU环境变量配置
+      copy:
+        dest: /etc/profile.d/ksc-aibox-npu.sh
+        content: |
+          # KSC AIBox NPU环境变量
+          export ASCEND_TOOLKIT_HOME=/usr/local/Ascend/ascend-toolkit
+          export ASCEND_HOME_PATH=/usr/local/Ascend
+          export LD_LIBRARY_PATH=/usr/local/Ascend/driver/lib64:$LD_LIBRARY_PATH
+          export PATH=/usr/local/Ascend/bin:$PATH
+          export ASCEND_VISIBLE_DEVICES=0,1,2,3
+          export PYTORCH_NPU_ALLOC_CONF=expandable_segments:True
+        mode: '0644'
+        owner: root
+        group: root
+      when: steps == 'all' or 'npu' in steps
+      tags: [npu, env]
+
+    - name: 创建NPU NUMA绑定脚本
+      copy:
+        dest: "{{ ksc_aibox_root }}/scripts/maintenance/npu-numa-bind.sh"
+        content: |
+          #!/bin/bash
+          NPU_ID=$1
+          shift
+          case $NPU_ID in
+            0|1) NUMA_NODE=0 ;;
+            2|3) NUMA_NODE=1 ;;
+            *) echo "Invalid NPU ID: $NPU_ID"; exit 1 ;;
+          esac
+          echo "Binding NPU $NPU_ID to NUMA node $NUMA_NODE"
+          numactl --cpunodebind=$NUMA_NODE --membind=$NUMA_NODE "$@"
+        mode: '0755'
+        owner: root
+        group: root
+      when: steps == 'all' or 'npu' in steps
+      tags: [npu, numa]
+
+    # ================================================
+    # 步骤4: Docker配置
+    # ================================================
+    - name: 创建Docker配置目录
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - /etc/docker
+        - /etc/systemd/system/docker.service.d
+      when: steps == 'all' or 'docker' in steps
+      tags: [docker, config]
+
+    - name: 配置Docker daemon.json
+      copy:
+        dest: /etc/docker/daemon.json
+        content: |
+          {
+            "data-root": "{{ ksc_aibox_root }}/docker/data",
+            "storage-driver": "overlay2",
+            "log-driver": "json-file",
+            "log-opts": {
+              "max-size": "100m",
+              "max-file": "3"
+            },
+            "default-ulimits": {
+              "nofile": {
+                "Name": "nofile",
+                "Hard": 65535,
+                "Soft": 65535
+              }
+            }
+          }
+        mode: '0644'
+        owner: root
+        group: root
+      when: steps == 'all' or 'docker' in steps
+      tags: [docker, config]
+
+    - name: 配置Docker systemd override
+      copy:
+        dest: /etc/systemd/system/docker.service.d/override.conf
+        content: |
+          [Service]
+          ExecStart=
+          ExecStart=/usr/bin/dockerd --data-root={{ ksc_aibox_root }}/docker/data
+        mode: '0644'
+      when: steps == 'all' or 'docker' in steps
+      tags: [docker, config]
+
+    - name: 重载systemd配置
+      systemd:
+        daemon_reload: yes
+      when: steps == 'all' or 'docker' in steps
+      tags: [docker, systemd]
+
+    - name: 启动Docker服务
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+      when: steps == 'all' or 'docker' in steps
+      tags: [docker, service]
+
+    # ================================================
+    # 步骤5: 创建监控脚本和服务
+    # ================================================
+    - name: 创建健康检查脚本
+      copy:
+        dest: "{{ ksc_aibox_root }}/scripts/monitor/system-health-check.sh"
+        content: |
+          #!/bin/bash
+          LOG_FILE="{{ ksc_aibox_root }}/logs/health-check.log"
+          STATUS_FILE="{{ ksc_aibox_root }}/config/system-status.json"
+          echo "=== Health Check at $(date) ===" >> $LOG_FILE
+          npu_status="OK"
+          if command -v npu-smi &> /dev/null; then
+            for i in 0 1 2 3; do
+              health=$(npu-smi info -t health -i $i -c 0 2>/dev/null | grep "Health Status" | awk '{print $NF}')
+              if [ "$health" != "OK" ]; then
+                npu_status="WARNING"
+              fi
+            done
+          fi
+          docker_status=$(systemctl is-active docker 2>/dev/null || echo "unknown")
+          cat > $STATUS_FILE << EOF
+          {"timestamp": "$(date -Iseconds)", "hostname": "$(hostname)", "npu_status": "$npu_status", "docker_status": "$docker_status"}
+          EOF
+        mode: '0755'
+        owner: root
+        group: root
+      when: steps == 'all' or 'scripts' in steps
+      tags: [scripts, health]
+
+    - name: 创建自愈脚本
+      copy:
+        dest: "{{ ksc_aibox_root }}/scripts/maintenance/self-healing.sh"
+        content: |
+          #!/bin/bash
+          LOG_FILE="{{ ksc_aibox_root }}/logs/self-healing.log"
+          log() { echo "[HEALING] $(date): $1" >> $LOG_FILE; }
+          log "Starting self-healing check..."
+          if [ "$(systemctl is-active docker 2>/dev/null)" != "active" ]; then
+            log "Docker not active, restarting..."
+            systemctl restart docker
+          fi
+          log "Self-healing completed"
+        mode: '0755'
+        owner: root
+        group: root
+      when: steps == 'all' or 'scripts' in steps
+      tags: [scripts, healing]
+
+    - name: 创建健康检查服务
+      copy:
+        dest: /etc/systemd/system/ksc-aibox-health-check.service
+        content: |
+          [Unit]
+          Description=KSC AIBox Health Check Service
+          After=network.target
+          [Service]
+          Type=oneshot
+          ExecStart={{ ksc_aibox_root }}/scripts/monitor/system-health-check.sh
+          [Install]
+          WantedBy=multi-user.target
+        mode: '0644'
+        owner: root
+        group: root
+      when: steps == 'all' or 'scripts' in steps
+      tags: [scripts, service]
+
+    - name: 创建健康检查定时器
+      copy:
+        dest: /etc/systemd/system/ksc-aibox-health-check.timer
+        content: |
+          [Unit]
+          Description=KSC AIBox Health Check Timer
+          [Timer]
+          OnCalendar=*:0/5
+          Persistent=true
+          [Install]
+          WantedBy=timers.target
+        mode: '0644'
+        owner: root
+        group: root
+      when: steps == 'all' or 'scripts' in steps
+      tags: [scripts, timer]
+
+    - name: 启用健康检查定时器
+      systemd:
+        name: ksc-aibox-health-check.timer
+        state: started
+        enabled: yes
+        daemon_reload: yes
+      when: steps == 'all' or 'scripts' in steps
+      tags: [scripts, timer]
+
+    # ================================================
+    # 步骤6: 验证
+    # ================================================
+    - name: 验证目录结构
+      stat:
+        path: "{{ item }}"
+      loop:
+        - "{{ ksc_aibox_root }}"
+        - "{{ ksc_aibox_root }}/apps"
+        - "{{ ksc_aibox_root }}/data"
+        - "{{ ksc_aibox_root }}/models"
+        - "{{ backup_root }}"
+      register: dir_verify
+      when: steps == 'all' or 'verify' in steps
+      tags: [verify]
+
+    - name: 验证内核参数
+      command: sysctl net.core.somaxconn vm.max_map_count
+      register: kernel_verify
+      changed_when: false
+      when: steps == 'all' or 'verify' in steps
+      tags: [verify]
+
+    - name: 验证HugePages
+      shell: grep HugePages_Total /proc/meminfo
+      register: hugepages_verify
+      changed_when: false
+      when: steps == 'all' or 'verify' in steps
+      tags: [verify]
+
+    - name: 验证Docker服务
+      command: docker info
+      register: docker_verify
+      changed_when: false
+      ignore_errors: yes
+      when: steps == 'all' or 'verify' in steps
+      tags: [verify]
+
+    - name: 创建版本信息文件
+      copy:
+        dest: "{{ ksc_aibox_root }}/VERSION"
+        content: |
+          KSC AIBox 版本信息
+          ==================
+          版本: 1.0.0
+          恢复时间: {{ ansible_date_time.iso8601 }}
+          主机名: {{ ansible_hostname }}
+          系统信息:
+          - 操作系统: {{ ansible_distribution }} {{ ansible_distribution_version }}
+          - 内核: {{ ansible_kernel }}
+          目录结构:
+          - 应用目录: {{ ksc_aibox_root }}/apps
+          - 数据目录: {{ ksc_aibox_root }}/data
+          - 模型目录: {{ ksc_aibox_root }}/models
+          - 备份目录: {{ backup_root }}
+        mode: '0644'
+        owner: root
+        group: root
+      when: steps == 'all' or 'verify' in steps
+      tags: [verify]
+
+    - name: 创建完成标记
+      copy:
+        dest: "{{ ksc_aibox_root }}/.autorun_completed"
+        content: "{{ ansible_date_time.iso8601 }}"
+        mode: '0644'
+        owner: root
+        group: root
+      when: steps == 'all' or 'verify' in steps
+      tags: [verify, always]
+
+  post_tasks:
+    - name: 显示恢复完成信息
+      debug:
+        msg:
+          - "=========================================="
+          - "KSC AIBox 系统恢复完成!"
+          - "=========================================="
+          - "目录结构: {{ ksc_aibox_root }}"
+          - "备份目录: {{ backup_root }}"
+          - "内核参数: {{ kernel_verify.stdout }}"
+          - "HugePages: {{ hugepages_verify.stdout }}"
+          - "=========================================="
+          - "日志文件: /var/log/ksc-aibox-autorun.log"
+          - "版本文件: {{ ksc_aibox_root }}/VERSION"
+          - "=========================================="
+      tags: [always]
