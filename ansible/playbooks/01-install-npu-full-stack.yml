@@ -1,0 +1,337 @@
+---
+# Huawei Ascend 910B NPU 完整安装 Playbook
+# 支持一键自动化安装，包含驱动、固件、CANN
+#
+# 使用方法:
+#   ansible-playbook -i inventory.ini playbooks/01-install-npu-full-stack.yml
+#
+# 预期效果:
+#   - 安装 NPU 驱动 25.5.1
+#   - 安装 NPU 固件 7.8.0.6.201
+#   - 安装 CANN Toolkit 9.0.0-beta.2
+#   - 配置自动加载模块
+#   - 配置固件路径
+#   - 验证安装结果
+
+- name: Install Huawei Ascend 910B NPU Full Stack
+  hosts: npu_servers
+  become: yes
+  gather_facts: yes
+  vars:
+    # 版本配置
+    npu_driver_version: "25.5.1"
+    npu_firmware_version: "7.8.0.6.201"
+    cann_version: "9.0.0-beta.2"
+    
+    # 安装路径
+    ascend_install_path: "/usr/local/Ascend"
+    firmware_device_path: "/home/bios/driver/device"
+    
+    # 本地备份文件路径 (相对于 playbook 目录)
+    backup_base_path: "../npu-backup"
+    
+    # 内核模块配置
+    kernel_modules:
+      - mdev
+      - drv_vascend
+    
+    # SELinux 状态 (安装期间临时禁用)
+    selinux_state: "permissive"
+
+  tasks:
+    # ============================================================
+    # 阶段 1: 环境准备
+    # ============================================================
+    - name: Check if running as root
+      assert:
+        that:
+          - ansible_user_id == 'root'
+        fail_msg: "This playbook must be run as root"
+        success_msg: "Running as root, continue"
+
+    - name: Create Ascend directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - "{{ ascend_install_path }}"
+        - "{{ firmware_device_path }}"
+        - "/var/log/ascend_seclog"
+        - "/etc/ascend"
+        - "/etc/Ascend"
+
+    - name: Disable SELinux temporarily
+      selinux:
+        state: "{{ selinux_state }}"
+      when: ansible_selinux.status is defined and ansible_selinux.status == 'enabled'
+
+    - name: Disable firewall
+      service:
+        name: firewalld
+        state: stopped
+        enabled: no
+      ignore_errors: yes
+
+    # ============================================================
+    # 阶段 2: 安装 NPU 驱动
+    # ============================================================
+    - name: Copy NPU driver files
+      copy:
+        src: "{{ backup_base_path }}/driver/"
+        dest: "{{ ascend_install_path }}/"
+        remote_src: no
+        mode: '0755'
+        force: yes
+
+    - name: Copy firmware files
+      copy:
+        src: "{{ backup_base_path }}/firmware/"
+        dest: "{{ ascend_install_path }}/"
+        remote_src: no
+        mode: '0755'
+        force: yes
+
+    - name: Run driver installation script
+      shell: |
+        cd {{ ascend_install_path }}/driver/tools
+        chmod +x install_npudrv.sh
+        ./install_npudrv.sh --install-for-all
+      register: driver_install_result
+      failed_when: false
+
+    - name: Wait for driver module to load
+      wait_for:
+        timeout: 30
+
+    - name: Load NPU kernel modules
+      modprobe:
+        name: "{{ item }}"
+        state: present
+      loop: "{{ kernel_modules }}"
+      ignore_errors: yes
+
+    # ============================================================
+    # 阶段 3: 安装 NPU 固件 (关键步骤)
+    # ============================================================
+    - name: Copy firmware to device path (CRITICAL for 910B)
+      copy:
+        src: "{{ ascend_install_path }}/driver/device/"
+        dest: "{{ firmware_device_path }}/"
+        remote_src: no
+        mode: '0644'
+        force: yes
+
+    - name: Set firmware file permissions
+      file:
+        path: "{{ firmware_device_path }}/{{ item }}"
+        mode: '0644'
+      loop:
+        - "ascend_910b_device_boot.img"
+        - "ascend_910b_device_sw.img"
+        - "ascend_910b_device_sw.bin"
+        - "ascend_910b_device_config.bin"
+        - "ascend_910b_device_config_16g.bin"
+        - "ascend_910b_hbm.bin"
+        - "ascend_910b_hsm.bin"
+        - "ascend_910b_imp.bin"
+        - "ascend_910b_imu.bin"
+        - "ascend_910b_tee.bin"
+        - "ascend_910b_syscfg.bin"
+
+    - name: Fix SELinux context for firmware files
+      shell: |
+        if command -v restorecon >/dev/null 2>&1; then
+          restorecon -Rv {{ firmware_device_path }}
+        fi
+      ignore_errors: yes
+
+    # ============================================================
+    # 阶段 4: 安装 CANN Toolkit
+    # ============================================================
+    - name: Copy CANN files
+      copy:
+        src: "{{ backup_base_path }}/cann-{{ cann_version }}/"
+        dest: "{{ ascend_install_path }}/"
+        remote_src: no
+        mode: '0755'
+        force: yes
+
+    - name: Create CANN symlink
+      file:
+        src: "{{ ascend_install_path }}/cann-{{ cann_version }}"
+        dest: "{{ ascend_install_path }}/cann"
+        state: link
+
+    - name: Create CANN bin symlink
+      file:
+        src: "{{ ascend_install_path }}/cann/aarch64-linux/bin"
+        dest: "{{ ascend_install_path }}/cann/bin"
+        state: link
+
+    - name: Copy CANN environment script
+      copy:
+        src: "{{ backup_base_path }}/cann-{{ cann_version }}/set_env.sh"
+        dest: "{{ ascend_install_path }}/cann/set_env.sh"
+        mode: '0644'
+        force: yes
+
+    # ============================================================
+    # 阶段 5: 配置模块自动加载
+    # ============================================================
+    - name: Configure kernel module auto-load
+      copy:
+        dest: "/etc/modules-load.d/ascend.conf"
+        content: |
+          # Huawei Ascend NPU kernel modules
+          mdev
+          drv_vascend
+        mode: '0644'
+
+    - name: Load modules immediately
+      modprobe:
+        name: "{{ item }}"
+        state: present
+      loop: "{{ kernel_modules }}"
+
+    # ============================================================
+    # 阶段 6: 配置系统参数
+    # ============================================================
+    - name: Configure system parameters
+      sysctl:
+        name: "{{ item.name }}"
+        value: "{{ item.value }}"
+        state: present
+        reload: yes
+        sysctl_file: "/etc/sysctl.d/99-ascend.conf"
+      loop:
+        - { name: "kernel.sysrq", value: "1" }
+        - { name: "kernel.panic", value: "10" }
+
+    - name: Disable multipath for NPU
+      lineinfile:
+        path: "/etc/multipath.conf"
+        regexp: '^blacklist'
+        line: 'blacklist {
+        }'
+        create: yes
+      notify: restart multipathd
+      ignore_errors: yes
+
+    - name: Add serial console parameters to GRUB
+      shell: |
+        grubby --update-kernel=ALL --args="console=ttyAMA0,115200n8 console=tty0 crashkernel=512M panic=10"
+      ignore_errors: yes
+
+    # ============================================================
+    # 阶段 7: 配置环境变量
+    # ============================================================
+    - name: Configure CANN environment variables globally
+      copy:
+        dest: "/etc/profile.d/ascend-cann.sh"
+        content: |
+          # Huawei Ascend CANN environment
+          export ASCEND_INSTALL_PATH={{ ascend_install_path }}
+          export ASCEND_TOOLKIT_HOME={{ ascend_install_path }}/cann
+          export PATH=$PATH:{{ ascend_install_path }}/cann/bin:{{ ascend_install_path }}/cann/compiler/bin
+          export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:{{ ascend_install_path }}/cann/lib64
+          export PYTHONPATH=$PYTHONPATH:{{ ascend_install_path }}/cann/python/site-packages
+        mode: '0644'
+
+    - name: Configure CANN environment for root
+      copy:
+        dest: "/root/.bashrc"
+        line: "source {{ ascend_install_path }}/cann/set_env.sh"
+        state: present
+
+    # ============================================================
+    # 阶段 8: 验证安装
+    # ============================================================
+    - name: Wait for system to stabilize
+      pause:
+        seconds: 30
+
+    - name: Check NPU device files
+      stat:
+        path: "/dev/davinci_manager"
+      register: davinci_manager_check
+
+    - name: Check NPU devices
+      shell: |
+        ls -la /dev/davinci* 2>/dev/null || echo "No davinci devices found"
+      register: npu_devices_check
+      changed_when: false
+
+    - name: Try to load driver module
+      modprobe:
+        name: drv_vascend
+        state: present
+      ignore_errors: yes
+
+    - name: Wait for NPU initialization
+      pause:
+        seconds: 15
+
+    - name: Check npu-smi availability
+      shell: |
+        source {{ ascend_install_path }}/cann/set_env.sh
+        which npu-smi && npu-smi info || echo "npu-smi not available"
+      register: npu_smi_check
+      changed_when: false
+      ignore_errors: yes
+
+    - name: Display installation summary
+      debug:
+        msg:
+          - "=============================================="
+          - "NPU Installation Summary"
+          - "=============================================="
+          - "Driver Version: {{ npu_driver_version }}"
+          - "Firmware Version: {{ npu_firmware_version }}"
+          - "CANN Version: {{ cann_version }}"
+          - "Install Path: {{ ascend_install_path }}"
+          - ""
+          - "Device Files:"
+          - "{{ npu_devices_check.stdout }}"
+          - ""
+          - "npu-smi output:"
+          - "{{ npu_smi_check.stdout }}"
+          - "=============================================="
+
+    # ============================================================
+    # 阶段 9: 生成验证报告
+    # ============================================================
+    - name: Generate installation report
+      copy:
+        dest: "/root/npu-install-report.txt"
+        content: |
+          ============================================
+          Huawei Ascend 910B NPU Installation Report
+          ============================================
+          Date: {{ ansible_date_time.iso8601 }}
+          Host: {{ inventory_hostname }}
+          
+          Installed Components:
+          - Driver: {{ npu_driver_version }}
+          - Firmware: {{ npu_firmware_version }}
+          - CANN: {{ cann_version }}
+          
+          Device Status:
+          {{ npu_devices_check.stdout }}
+          
+          npu-smi Output:
+          {{ npu_smi_check.stdout }}
+          
+          ============================================
+
+    - name: Set report permissions
+      file:
+        path: "/root/npu-install-report.txt"
+        mode: '0644'
+
+  handlers:
+    - name: restart multipathd
+      service:
+        name: multipathd
+        state: restarted
+      ignore_errors: yes

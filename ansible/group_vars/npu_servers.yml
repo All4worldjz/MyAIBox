@@ -1,0 +1,37 @@
+---
+# NPU 服务器全局变量
+
+# 版本配置
+npu_driver_version: "25.5.1"
+npu_firmware_version: "7.8.0.6.201"
+cann_version: "9.0.0-beta.2"
+
+# 安装路径
+ascend_install_path: "/usr/local/Ascend"
+firmware_device_path: "/home/bios/driver/device"
+
+# 内核模块
+kernel_modules:
+  - mdev
+  - drv_vascend
+
+# SELinux 配置
+selinux_state: "permissive"
+
+# 系统配置
+sysctl_params:
+  - { name: "kernel.sysrq", value: "1" }
+  - { name: "kernel.panic", value: "10" }
+
+# 备份文件路径
+backup_base_path: "../npu-backup"
+
+# 驱动安装选项
+driver_install_options: "--install-for-all"
+
+# CANN 安装选项
+cann_install_options: "--full --quiet"
+
+# 验证等待时间
+initialization_wait_seconds: 30
+module_load_wait_seconds: 15
