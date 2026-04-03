@@ -384,5 +384,53 @@ NPU 驱动验证成功后，继续安装：
 
 ---
 
+## 11. 完整安装记录 (2026-04-03)
+
+### 11.1 已安装组件
+| 组件 | 版本 | 安装日期 |
+|------|------|----------|
+| 驱动 (driver) | 25.5.1 | 2026-04-03 |
+| 固件 (firmware) | 7.8.0.6.201 | 2026-04-03 |
+| CANN Toolkit | 9.0.0-beta.2 | 2026-04-03 |
+
+### 11.2 问题修复记录
+
+#### 问题1: mdev 模块缺失
+- **错误**: `drv_vascend: Unknown symbol mdev_register_parent (err -2)`
+- **原因**: openEuler SP3 内核未编译 VFIO_MDEV 模块
+- **解决**: 从内核源码编译 mdev.ko 并配置自动加载
+
+#### 问题2: npu-smi 报错 "dcmi module initialize failed. ret is -8005"
+- **原因**: CANN Toolkit 未安装
+- **解决**: 安装本地 CANN toolkit 9.0.0-beta.2
+
+#### 问题3: 固件加载失败 "File copy error"
+- **错误**: `File copy error. (dev_id=X; file=4; name="/home/bios/driver/device/ascend_910b_device_boot.img"; -2)`
+- **原因**: 驱动代码硬编码路径 `/home/bios/driver/device/`，但固件默认在 `/usr/local/Ascend/driver/device/`
+- **解决**: 复制固件到正确路径
+```bash
+mkdir -p /home/bios/driver/device
+cp -r /usr/local/Ascend/driver/device/* /home/bios/driver/device/
+```
+
+### 11.3 最终验证结果
+```
+=== 系统状态 ===
+  up 2 min, load average: 0.61
+
+=== NPU状态 ===
+| NPU   Name   | Health | Power(W) | Temp(C) |
+| 910B4-1     | OK     | 71.6     | 39      |
+| 910B4-1     | OK     | 74.0     | 40      |
+| 910B4-1     | OK     | 77.2     | 40      |
+| 910B4-1     | OK     | 72.6     | 40      |
+
+=== 设备文件 ===
+/dev/davinci_manager
+/dev/davinci1 ~ davinci4
+```
+
+---
+
 *文档生成时间: 2026-04-03*
-*最后更新: mdev 模块问题修复完成*
+*最后更新: CANN安装和固件路径修复完成，NPU驱动验证成功*
