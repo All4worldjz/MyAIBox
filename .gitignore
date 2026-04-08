@@ -121,3 +121,4 @@ htmlcov/
 # 项目特定
 # ============================================
 ansible/ansible.lognpu-backup/
+drivers/
