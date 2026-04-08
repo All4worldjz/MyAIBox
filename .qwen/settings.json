@@ -47,7 +47,9 @@
       "Bash(tar *)",
       "Bash(git remote *)",
       "Bash(git push *)",
-      "Bash(gh *)"
+      "Bash(gh *)",
+      "Bash(ping *)",
+      "Bash(nc *)"
     ]
   },
   "$version": 3
