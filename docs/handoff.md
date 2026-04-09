@@ -9,7 +9,7 @@
 | **项目名称** | KSC AIBox - 金山政务AI一体机部署 |
 | **版本** | 1.0.0 |
 | **创建日期** | 2026-04-03 |
-| **当前状态** | 系统优化完成，待安装技术底座 |
+| **当前状态** | 系统全面优化完成，AI Agent Skills 已部署，待冷启动固件生效 |
 | **Git分支** | dev |
 | **Ansible版本** | 2.x (Python 3.11) |
 
@@ -30,11 +30,21 @@ NPU: 华为昇腾910B4-1 × 4张, 每张64GB HBM, 驱动版本25.2.3
 ### 软件配置
 
 ```
-操作系统: openEuler 24.03 LTS-SP1
-内核: 6.6.0-72.0.0.76.oe2403sp1.aarch64
+操作系统: openEuler 24.03 LTS-SP3
+内核: 6.6.0-144.0.0.130.oe2403sp3.aarch64
 架构: ARM64 (aarch64)
-SELinux: Enforcing
-Docker: 18.09.0
+SELinux: Permissive (2026-04-09 调整)
+Docker: 18.09.0 (openEuler 定制版 18.09.0.346，含安全补丁)
+tuned: 2.24.1 (throughput-performance 配置)
+THP: madvise (2026-04-09 调整，持久化到 rc.local)
+
+CANN: 9.0.0-beta.2
+CANN Python: te ✅, topi ⚠️ (版本特性)
+CANN 依赖: numpy/decorator/attrs/psutil/tornado/grpcio/protobuf/scipy ✅
+
+NPU 驱动: 25.5.1 ✅
+NPU 固件: 7.8.0.6.201 (已安装并激活，待冷启动生效)
+NPU 固件 (当前运行): 7.7.0.10.220 (冷启动后切换)
 ```
 
 ### 网络配置
@@ -157,6 +167,88 @@ vm.nr_hugepages = 122949  # 约240GB
 - rngd.service
 ```
 
+### 阶段4.5: 系统全面优化 (2026-04-09) ✅
+
+#### Python 环境修复
+
+```bash
+# 已安装 CANN Python 依赖
+pip3 install numpy decorator attrs psutil tornado grpcio protobuf scipy sympy
+
+# 验证结果
+CANN te: ✅ 正常导入
+CANN topi: ⚠️ 不可用 (9.0.0-beta.2 版本特性)
+```
+
+#### Transparent HugePages 调整
+
+```bash
+# 从 always 调整为 madvise (推荐 NPU 场景)
+echo madvise > /sys/kernel/mm/transparent_hugepage/enabled
+# 持久化到 rc.local
+```
+
+#### tuned 性能配置安装
+
+```bash
+dnf install tuned -y
+tuned-adm profile throughput-performance
+```
+
+#### SELinux 调整
+
+```bash
+# 从 Enforcing 调整为 Permissive (容器/NPU 兼容性)
+setenforce 0
+# 持久化到 /etc/selinux/config
+```
+
+#### Ansible 配置版本统一
+
+```yaml
+# ansible/group_vars/all.yml 修复
+npu_driver_version: "25.2.3" → "25.5.1"
+npu_firmware_version: "7.8.0.6.201" (新增)
+cann_version: "9.0.0-beta.2" (新增)
+```
+
+#### NPU 固件升级
+
+```bash
+# 固件包: Ascend-hdk-910b-npu-firmware_7.8.0.6.201.run
+# 升级状态: 已安装并激活 (7.8.0.6.201)
+# 运行版本: 7.7.0.10.220 (需冷启动生效)
+# 注意: 通过 BMC/iBMC 执行冷启动，或物理断电 30 秒后重启
+```
+
+#### 内存分析
+
+```bash
+# HugePages 240GB 是预留给 NPU 的，不是真实消耗
+# 实际可用内存: MemAvailable ≈ 4.7GB (清理 Page Cache 后)
+# 真实物理消耗: ≈ 10GB (K3s/containerd/其他进程)
+```
+
+#### AI Agent Skills 部署
+
+```
+已部署 54 个 AI Agent Skills:
+- src/agent-skills/ 目录 (47 个一级技能)
+- mindspeed-llm-auto-ut-skills/ 子技能 (7 个)
+- 跨 AI 工具配置文件: AGENTS.md, .cursorrules, .clinerules,
+  .github/copilot-instructions.md, .windsurfrules
+- 自动同步脚本: scripts/sync-agent-skills.sh
+- 场景匹配引擎: scripts/match-skills.py
+```
+
+#### 跳过项目
+
+| 项目 | 原因 |
+|------|------|
+| SSH 安全加固 | 用户要求跳过 |
+| Docker 升级 | 18.09.0.346 已含安全补丁，满足所有 SKILL 要求 |
+| Ascend Runtime | CANN 9.0.0-beta.2 已包含完整 Runtime |
+
 ### 阶段5: HCI架构优化 ✅
 
 #### 健康检查服务
@@ -192,6 +284,13 @@ vm.nr_hugepages = 122949  # 约240GB
 ```
 
 ## 待完成工作
+
+### 待处理事项
+
+| 事项 | 状态 | 说明 |
+|------|------|------|
+| NPU 固件冷启动 | ⏳ 待执行 | 固件 7.8.0.6.201 已安装激活，需冷启动生效 |
+| SSH 安全加固 | ⏭️ 跳过 | 用户要求跳过 |
 
 ### 阶段6: 技术底座安装 (待执行)
 

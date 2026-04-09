@@ -1,0 +1,68 @@
+# Windsurf Rules — KSC AIBox
+
+## 项目上下文
+
+本项目为 **KSC AIBox**（金山政务AI一体机），基于 Huawei Ascend 910B NPU + openEuler + Ansible 自动化部署。
+
+### 必读文件
+
+- `AGENTS.md` — **技能索引总表**（54 个 AI Agent Skills）
+- `QWEN.md` — 项目上下文
+- `docs/Agent.md` — AI Agent 协作指南
+- `docs/SKILL.md` — 项目实施技能与踩坑经验
+
+### 关键路径
+
+| 路径 | 用途 |
+|------|------|
+| `/ksc_aibox` | AI一体机根目录 |
+| `/ksc_aibox/apps/` | 应用目录 |
+| `/ksc_aibox/models/` | 模型文件 |
+| `/ksc_aibox/data/` | 数据目录 |
+| `/ksc_aibox/docker/` | Docker数据 |
+
+---
+
+## AI Agent Skills (54个)
+
+所有技能定义在 `src/agent-skills/` 目录下。每个技能包含：
+- `SKILL.md` — 技能定义和执行指南
+- `references/` — 参考文档（可选）
+- `scripts/` — 可执行脚本（可选）
+- `templates/` — 代码模板（可选）
+
+### 使用技能
+
+1. 查阅 `AGENTS.md` 中的技能索引表，找到对应技能
+2. 读取 `src/agent-skills/<skill-name>/SKILL.md`
+3. 按技能指引执行任务
+
+### 常用技能
+
+| 分类 | 技能 | 用途 |
+|------|------|------|
+| 环境部署 | `ascend-docker`, `ascend-npu-driver-install`, `cann-operator-env-config`, `atc-model-converter`, `hccl-test` | Docker/驱动/CANN/模型转换/通信测试 |
+| AscendC开发 | `ascendc-operator-dev`（编排器）, `ascendc-operator-design`, `ascendc-operator-code-gen`, `ascendc-operator-compile-debug`, `ascendc-operator-performance-optim` | AscendC算子全流程 |
+| Triton开发 | `triton-operator-dev`（编排器）, `triton-operator-code-gen`, `triton-operator-performance-optim` | Triton算子全流程 |
+| 通用工具 | `auto-bug-fixer`, `auto-develop-test-gen`, `python-refactoring` | Bug修复/测试生成/重构 |
+
+---
+
+## 编码规范
+
+- **语言**: 始终用中文回复
+- **Playbook**: YAML, 2 空格缩进
+- **脚本**: Bash
+- **变量**: snake_case
+
+## 安全规范
+
+- 不提交敏感信息
+- 先读后改
+- 执行验证
+
+## 技能更新
+
+```bash
+./scripts/sync-agent-skills.sh
+```

@@ -1,0 +1,70 @@
+# Cline/Roo Code Rules — KSC AIBox
+
+## 项目上下文
+
+本项目为 **KSC AIBox**（金山政务AI一体机），基于 Huawei Ascend 910B NPU + openEuler + Ansible 自动化部署。
+
+### 必读文件
+
+开始工作前请先阅读以下文件：
+- `AGENTS.md` — **技能索引总表**（包含 54 个 AI Agent Skills）
+- `QWEN.md` — 项目上下文
+- `docs/Agent.md` — AI Agent 协作指南
+- `docs/SKILL.md` — 项目实施技能与踩坑经验
+
+### 关键路径
+
+| 路径 | 用途 |
+|------|------|
+| `/ksc_aibox` | AI一体机根目录 |
+| `/ksc_aibox/apps/` | 应用目录 |
+| `/ksc_aibox/models/` | 模型文件 |
+| `/ksc_aibox/data/` | 数据目录 |
+| `/ksc_aibox/docker/` | Docker数据 |
+
+---
+
+## AI Agent Skills (54个)
+
+本项目包含 54 个 AI Agent Skills，定义在 `src/agent-skills/` 目录下。每个技能目录包含 `SKILL.md` 定义文件。
+
+### 使用技能
+
+当用户要求执行某项任务时：
+1. 查阅 `AGENTS.md` 中的技能索引表，找到对应的技能目录
+2. 读取 `src/agent-skills/<skill-name>/SKILL.md` 获取详细执行指南
+3. 技能目录中可能包含 `references/`、`scripts/`、`templates/` 等辅助资源
+
+### 常用技能分类
+
+| 分类 | 技能数 | 覆盖范围 |
+|------|--------|----------|
+| 环境部署 | 5 | Docker/NPU驱动/CANN/ATC模型转换/HCCL测试 |
+| AscendC算子 | 12 | 从需求→设计→代码→编译→精度→性能→优化全流程 |
+| CATLASS算子 | 4 | 矩阵算子设计、开发、优化 |
+| Triton算子 | 9 | Triton 算子设计、开发、精度/性能评估 |
+| Megatron迁移 | 4 | 变更分析、提交跟踪、影响映射、迁移生成 |
+| MindSpeed测试 | 7 | 代码理解、测试生成、覆盖率分析 |
+| NPU运维 | 6 | 设备管理、适配审查、Profiling分析 |
+| 通用工具 | 7 | Bug修复、测试生成、Python重构、安全审计 |
+
+---
+
+## 编码规范
+
+- **语言**: 始终用中文回复
+- **Playbook**: YAML 格式, 2 空格缩进
+- **脚本**: Bash, 遵循 `.editorconfig`
+- **变量命名**: snake_case
+
+## 安全规范
+
+- 不提交敏感信息
+- 先读后改
+- 执行验证
+
+## 技能更新
+
+```bash
+./scripts/sync-agent-skills.sh
+```

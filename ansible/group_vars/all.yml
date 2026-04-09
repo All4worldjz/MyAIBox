@@ -74,7 +74,9 @@ npu_devices:
   - davinci1
   - davinci2
   - davinci3
-npu_driver_version: "25.2.3"
+npu_driver_version: "25.5.1"
+npu_firmware_version: "7.8.0.6.201"
+cann_version: "9.0.0-beta.2"
 
 # 服务端口配置
 service_ports:

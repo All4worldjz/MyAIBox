@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.aibox.sync-skills</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>-c</string>
+        <string>cd /Users/whoami2023/Documents/GitRepo/MyAIBox &amp;&amp; ./scripts/sync-agent-skills.sh --check</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/whoami2023/Documents/GitRepo/MyAIBox</string>
+
+    <key>StandardOutPath</key>
+    <string>/tmp/skills-sync-launchd.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/tmp/skills-sync-launchd.log</string>
+
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>2</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+        <key>Weekday</key>
+        <integer>0</integer>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <false/>
+</dict>
+</plist>

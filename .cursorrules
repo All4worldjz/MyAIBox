@@ -1,0 +1,115 @@
+# Cursor Rules — KSC AIBox
+
+## 项目上下文
+
+本项目为 **KSC AIBox**（金山政务AI一体机），基于 Huawei Ascend 910B NPU + openEuler + Ansible 自动化部署。
+
+### 必读文件
+
+开始工作前请先阅读以下文件：
+- `AGENTS.md` — **技能索引总表**（包含 54 个 AI Agent Skills）
+- `QWEN.md` — 项目上下文（版本/硬件/部署命令）
+- `docs/Agent.md` — AI Agent 协作指南
+- `docs/SKILL.md` — 项目实施技能与踩坑经验
+
+### 关键路径
+
+| 路径 | 用途 |
+|------|------|
+| `/ksc_aibox` | AI一体机根目录 |
+| `/ksc_aibox/apps/` | 应用目录 |
+| `/ksc_aibox/models/` | 模型文件 |
+| `/ksc_aibox/data/` | 数据目录 |
+| `/ksc_aibox/docker/` | Docker数据 |
+| `/ksc_aibox/logs/` | 日志 |
+
+---
+
+## AI Agent Skills
+
+本项目包含 **54 个 AI Agent Skills**，定义在 `src/agent-skills/` 目录下。
+
+### 自动场景匹配
+
+当用户提出任务时，首先分析任务场景，运行以下命令自动匹配技能：
+
+```bash
+python3 scripts/match-skills.py "用户任务描述"
+```
+
+示例：
+- `python3 scripts/match-skills.py "安装NPU驱动"`
+- `python3 scripts/match-skills.py "开发AscendC算子全流程"`
+- `python3 scripts/match-skills.py "triton算子从GPU迁移到NPU"`
+- `python3 scripts/match-skills.py "HCCL多机通信测试"`
+
+该命令会输出匹配的场景名称、推荐技能列表和技能路径。然后根据推荐读取对应 `SKILL.md` 文件。
+
+### 手动技能加载
+
+也可查阅 `AGENTS.md` 中的技能索引表，找到对应的技能目录，然后读取该目录下的 `SKILL.md` 文件获取详细执行指南。
+
+#### 常用技能快速索引
+
+**环境部署**:
+- `ascend-docker` — Docker 容器创建
+- `ascend-npu-driver-install` — NPU驱动安装
+- `cann-operator-env-config` — CANN 环境配置
+- `atc-model-converter` — ATC 模型转换 (ONNX→OM)
+- `hccl-test` — HCCL 集合通信测试
+
+**AscendC 算子开发**:
+- `ascendc-operator-dev` — 端到端开发编排器（推荐新手使用）
+- `ascendc-operator-design` — 算子设计
+- `ascendc-operator-code-gen` — 代码生成
+- `ascendc-operator-compile-debug` — 编译调试
+- `ascendc-operator-precision-eval` — 精度评估
+- `ascendc-operator-performance-optim` — 性能优化
+
+**Triton 算子开发**:
+- `triton-operator-dev` — 全流程开发编排
+- `triton-operator-code-gen` — 代码生成
+- `triton-operator-performance-optim` — 性能优化
+
+**通用工具**:
+- `auto-bug-fixer` — 自动 Bug 修复
+- `auto-develop-test-gen` — 测试生成
+- `python-refactoring` — Python 代码重构
+- `npu-adapter-reviewer` — GPU→NPU 适配审查
+
+### 加载具体技能
+
+找到技能目录后，使用以下方式加载：
+
+```
+读取 src/agent-skills/<skill-name>/SKILL.md 获取详细执行指南
+```
+
+每个技能目录可能还包含：
+- `references/` — 参考文档
+- `scripts/` — 可执行脚本
+- `templates/` — 代码模板
+
+---
+
+## 编码规范
+
+- **Playbook**: YAML 格式, 2 空格缩进
+- **脚本**: Bash, 遵循 `.editorconfig` 配置
+- **变量命名**: snake_case, 带前缀分组
+- **语言**: 始终用中文回复
+
+## 安全规范
+
+- 绝不提交 API Keys 或敏感信息
+- 先读取现有代码再修改
+- 遵循项目编码风格
+- 禁止删除已有功能代码，除非明确要求
+- 执行验证命令确认变更正确
+
+## 技能更新
+
+技能文件存储在 `src/agent-skills/` 目录。如需更新，运行：
+```bash
+./scripts/sync-agent-skills.sh
+```

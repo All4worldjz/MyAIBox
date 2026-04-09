@@ -1,0 +1,10 @@
+[Unit]
+Description=AIBox Agent Skills Weekly Sync
+Requires=aibox-sync-skills.service
+
+[Timer]
+OnCalendar=Sun *-*-* 02:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

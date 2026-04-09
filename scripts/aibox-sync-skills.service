@@ -1,0 +1,14 @@
+[Unit]
+Description=AIBox Agent Skills Sync Check
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/path/to/MyAIBox
+ExecStart=/bin/bash -c './scripts/sync-agent-skills.sh --check'
+StandardOutput=append:/tmp/skills-sync-systemd.log
+StandardError=append:/tmp/skills-sync-systemd.log
+
+[Install]
+WantedBy=multi-user.target
