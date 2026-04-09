@@ -49,7 +49,11 @@
       "Bash(git push *)",
       "Bash(gh *)",
       "Bash(ping *)",
-      "Bash(nc *)"
+      "Bash(nc *)",
+      "WebFetch(gitcode.com)",
+      "WebSearch",
+      "Bash(git clone *)",
+      "Bash(git *)"
     ]
   },
   "$version": 3

@@ -235,3 +235,6 @@ Playbook采用数字前缀排序:
 - `docs/SYSTEM-CONFIGURATION.md` — 系统配置文档
 - `docs/memory-management-architecture.md` — 内存管理架构
 - `CHANGELOG.md` — 变更日志
+
+## Qwen Added Memories
+- 上游 SKILL 文件仓库地址：https://gitcode.com/Ascend/agent-skills/tree/master
