@@ -1,0 +1,141 @@
+---
+# ==============================================================================
+# Playbook: KSC AIBox - Commercial Appliance V2 Deployment (Docker Compose)
+# ==============================================================================
+
+- name: Deploy KSC AIBox Commercial Appliance (V2)
+  hosts: aibox
+  become: yes
+  vars:
+    base_dir: "/ksc_aibox"
+    source_dir: "{{ base_dir }}/source"
+    compose_dir: "{{ base_dir }}/docker-compose-v2"
+    config_dir: "{{ base_dir }}/config"
+    monitor_dir: "{{ base_dir }}/scripts/monitor"
+    # 算力矩阵配置 (V2.1 - 基于实测路径修正)
+    npu_topology:
+      qingqiu_qwen3:
+        enabled: true
+        replicas: 2
+        cards: [0, 2]
+        internal_port: 1025
+        image: "hub.ai.aio.cloud/plss-ai/ascend-qwen3-arm:2.1.RC1-800I-A2-py311-openeuler24.03-lts"
+        model_host_path: "/ksc_aibox/models/llm/Qwen2.5-14B-Instruct/Qwen/Qwen2___5-14B-Instruct"
+        model_container_path: "/home/models/qingqiu-Qwen3-13b-base"
+      qwen4b:
+        enabled: true
+        replicas: 1
+        cards: [1]
+        internal_port: 1026
+        image: "hub.ai.aio.cloud/plss-ai/ascend-qwen3-arm:2.1.RC1-800I-A2-py311-openeuler24.03-lts"
+        model_host_path: "/ksc_aibox/models/llm/Qwen2.5-7B-Instruct"
+        model_container_path: "/home/models/shuke-4b-base"
+      emb:
+        enabled: true
+        replicas: 1
+        cards: [1]
+        internal_port: 5377
+        image: "hub.ai.aio.cloud/plss-ai/ascend-embedding-arm:2.1.RC1-800I-A2-py311-openeuler24.03-lts_model"
+        model_host_path: "/ksc_aibox/models/embedding/bge-large-zh-v1.5"
+        model_container_path: "/home/models/bge-large-zh-v1.5"
+      reranker:
+        enabled: true
+        replicas: 1
+        cards: [1]
+        internal_port: 5277
+        image: "hub.ai.aio.cloud/plss-ai/ascend-reranker-arm:2.1.RC1-800I-A2-py311-openeuler24.03-lts_model"
+        model_host_path: "/ksc_aibox/models/rerank/bge-reranker-large"
+        model_container_path: "/home/models/bge-reranker-large"
+      qa_specialized:
+        enabled: true
+        replicas: 1
+        cards: [3]
+        internal_port: 8102
+        image: "hub.ai.aio.cloud/plss-ai/ascend-qwen3-arm:2.1.RC1-800I-A2-py311-openeuler24.03-lts"
+        model_host_path: "/ksc_aibox/models/llm/Qwen2.5-14B-Instruct/Qwen/Qwen2___5-14B-Instruct"
+        model_container_path: "/home/models/qingqiu-Qwen3-13b-base"
+    
+  tasks:
+    - name: 1. 清理遗留容器环境
+      shell: |
+        docker stop $(docker ps -aq) || true
+        docker rm $(docker ps -aq) || true
+      ignore_errors: yes
+
+    - name: 2. 建立目录架构
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - "{{ compose_dir }}"
+        - "{{ config_dir }}"
+        - "{{ monitor_dir }}"
+        - "{{ base_dir }}/logs/self-healing"
+
+    - name: 3. 确保网络存在
+      shell: >
+        docker network inspect ksc-aibox-network >/dev/null 2>&1 ||
+        docker network create
+        --driver bridge
+        --opt com.docker.network.bridge.name=ksc-aibox0
+        ksc-aibox-network
+
+    - name: 3.1 将 Docker 网桥加入 trusted zone
+      shell: |
+        firewall-cmd --permanent --zone=trusted --query-interface=ksc-aibox0 || \
+        firewall-cmd --permanent --zone=trusted --add-interface=ksc-aibox0
+        firewall-cmd --reload
+
+    - name: 4. 分发渲染配置
+      template:
+        src: "templates/{{ item }}.j2"
+        dest: "{{ config_dir }}/{{ item }}"
+      loop:
+        - npu-topology.yml
+        - ai-nginx.conf
+
+    - name: 5. 渲染 Docker Compose 模板
+      template:
+        src: "templates/{{ item }}.j2"
+        dest: "{{ compose_dir }}/{{ item }}"
+      loop:
+        - docker-compose.ai.yml
+        - docker-compose.apps.yml
+
+    - name: 6. 下发 Watchdog
+      template:
+        src: "templates/watchdog.sh.j2"
+        dest: "{{ monitor_dir }}/system-watchdog.sh"
+        mode: '0755'
+        setype: bin_t
+        
+    - name: 7. 安装 Watchdog Systemd
+      copy:
+        dest: "/etc/systemd/system/aibox-watchdog.service"
+        content: |
+          [Unit]
+          Description=KSC AIBox Watchdog
+          [Service]
+          Type=oneshot
+          ExecStart=/bin/bash {{ monitor_dir }}/system-watchdog.sh
+
+    - name: 8. 安装 Watchdog Timer
+      copy:
+        dest: "/etc/systemd/system/aibox-watchdog.timer"
+        content: |
+          [Unit]
+          Description=Run AIBox Watchdog
+          [Timer]
+          OnBootSec=5min
+          OnUnitActiveSec=1min
+          [Install]
+          WantedBy=timers.target
+
+    - name: 9. 启动业务集群
+      shell: |
+        systemctl daemon-reload
+        systemctl enable --now aibox-watchdog.timer
+        cd {{ compose_dir }}
+        docker-compose -f docker-compose.ai.yml up -d
+        docker-compose -f docker-compose.apps.yml up -d

@@ -1,0 +1,51 @@
+#!/bin/bash
+# KSC AIBox - 三层自愈守护脚本 (HCI 2.0 Watchdog)
+
+LOG_FILE="/ksc_aibox/logs/self-healing/watchdog.log"
+DOCKER_NETWORK="ksc-aibox-network"
+NPU_RETRY_COUNT=5
+NPU_RETRY_INTERVAL=5
+GATEWAY_RETRY_COUNT=3
+GATEWAY_RETRY_INTERVAL=5
+
+# 确保全局网络存在
+if ! docker network ls | grep -q "$DOCKER_NETWORK"; then
+  docker network create "$DOCKER_NETWORK"
+fi
+
+check_npu() {
+  local npu_count=""
+  local attempt=1
+
+  while [ "$attempt" -le "$NPU_RETRY_COUNT" ]; do
+    npu_count=$(npu-smi info -l 2>/dev/null | awk -F: '/Total Count/ {gsub(/ /, "", $2); print $2; exit}')
+    if [ -n "$npu_count" ] && [ "$npu_count" -ge 4 ] 2>/dev/null; then
+      return 0
+    fi
+    echo "[$(date)] WARN: NPU count probe failed on attempt $attempt/$NPU_RETRY_COUNT (value='$npu_count')." >> "$LOG_FILE"
+    sleep "$NPU_RETRY_INTERVAL"
+    attempt=$((attempt + 1))
+  done
+
+  echo "[$(date)] ERROR: NPU count check failed after $NPU_RETRY_COUNT attempts (value='$npu_count'). Skipping reboot." >> "$LOG_FILE"
+  return 1
+}
+
+check_gateway() {
+  local attempt=1
+
+  while [ "$attempt" -le "$GATEWAY_RETRY_COUNT" ]; do
+    if curl -fsS --connect-timeout 5 http://127.0.0.1:8064 > /dev/null; then
+      return 0
+    fi
+    echo "[$(date)] WARN: Gateway 8064 probe failed on attempt $attempt/$GATEWAY_RETRY_COUNT." >> "$LOG_FILE"
+    sleep "$GATEWAY_RETRY_INTERVAL"
+    attempt=$((attempt + 1))
+  done
+
+  echo "[$(date)] ERROR: Gateway 8064 stayed down after $GATEWAY_RETRY_COUNT attempts. Restarting plss-gateway." >> "$LOG_FILE"
+  docker restart plss-gateway
+}
+
+check_npu
+check_gateway

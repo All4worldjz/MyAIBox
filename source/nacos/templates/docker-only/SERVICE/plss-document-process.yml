@@ -1,0 +1,91 @@
+spring:
+  ## db config
+  datasource:
+    druid:
+      stat-view-servlet:
+        enabled: true
+        login-username: admin
+        login-password: 123456
+    dynamic:
+      hikari:
+        connection-timeout: 10000
+        idle-timeout: 600000
+        max-lifetime: 1800000
+        max-pool-size: 200
+        min-idle: 20
+      datasource:
+        master: # 主库数据源
+          driver-class-name: org.postgresql.Driver
+          url: jdbc:postgresql://postgres:5432/plss?currentSchema=plss-document-process&useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&allowMultiQueries=true&useSSL=true&serverTimezone=GMT%2B8
+          username: suwell
+          password: sw_1357924680
+
+          # type: com.zaxxer.hikari.HikariDataSource
+          # driver-class-name: dm.jdbc.driver.DmDriver
+          # url: jdbc:dm://${dm-addr}?schema=""plss-document-process""&useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&allowMultiQueries=true&useSSL=true&serverTimezone=GMT%2B8
+          # username: ${dm-username}
+          # password: ${dm-password}
+
+        #   driver-class-name: com.mysql.cj.jdbc.Driver
+        #   url: jdbc:mysql://localhost:3306/plss-system?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=true&serverTimezone=GMT%2B8
+        #   username: root
+        #   password: root
+        # slave: # 从库数据源
+        #   driver-class-name: 
+        #   url: 
+        #   username: 
+        #   password: 
+
+  rabbitmq:
+      listener:
+        simple:
+          concurrency: 5
+          max-concurrency: 5
+          batch-size: 15
+## mybatis-plus config
+mybatis-plus:
+  type-aliases-package: com.suwell.plss.**.entity
+  mapper-locations: classpath*:mapper/postgresql/**/*Mapper.xml
+  # mapper-locations: classpath*:mapper/dm/*Mapper.xml
+
+
+  
+ok:
+  http:
+    connect-timeout: 300
+    read-timeout: 800
+    write-timeout: 300
+    max-idle-connections: 1500
+    keep-alive-duration: 3000
+
+suwell:
+  convert:
+    uri: http://convert-edms:8091
+    maxThreadCount: 10
+    connectTimeoutInMissecond: 30000
+    readTimeoutInMissecond: 300000
+  ocr:
+    uri: http://plss-doc-proc:8063
+  temp-dir: /home/document_process/
+
+
+## 文件处理服务配置 接口的实现方式
+plss:
+  feature:
+    ## 第三方功能配置信息: 1-公司自研产品:ai中台实现、转换ofd实现、ocr提取正文实现 2-内置开源库:ai中台实现、转换ofd实现、ocr提取正文实现
+    convertOfdApiImpl: 1
+    ocrTextApiImpl: 1
+    nlpExtractApiImpl: 1
+  
+  ## ai需要配置的服务器域名
+  nlp-ai:
+    ## 算法任务分析域名
+    analyzeExtractDomain: http://ai-gateway:80
+    ## 关键词搜索向量化域名
+    algorithmVectorDomain: http://ai-gateway:80
+
+
+## 日志级别增量配置
+app: 
+  global: 
+    log_level: INFO

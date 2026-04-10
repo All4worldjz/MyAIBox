@@ -1,0 +1,150 @@
+spring:
+  shardingsphere:
+    datasource:
+      names: logic-system
+      logic-system:
+        type: ${spring.datasource.dynamic.datasource.master.type}
+        driver-class-name: ${spring.datasource.dynamic.datasource.master.driver-class-name}
+        jdbc-url: ${spring.datasource.dynamic.datasource.master.url}
+        username: ${spring.datasource.dynamic.datasource.master.username}
+        password: ${spring.datasource.dynamic.datasource.master.password}
+        connection-timeout: ${spring.datasource.dynamic.hikari.connection-timeout}
+        idle-timeout: ${spring.datasource.dynamic.hikari.idle-timeout}
+        max-lifetime: ${spring.datasource.dynamic.hikari.max-lifetime}
+        max-pool-size: ${spring.datasource.dynamic.hikari.max-pool-size}
+        min-idle: ${spring.datasource.dynamic.hikari.min-idle}
+    props:
+      sql-show: true
+    # rules:
+    #   sharding:
+    #     sharding-algorithms:
+    #       userBehaviorlogSharding:
+    #         type: plss-user-behavior-log-sharding
+    #     tables:
+    #       sys_user_behavior_log:
+    #         actual-data-nodes: logic-system.sys_user_behavior_log
+    #         table-strategy:
+    #           complex:
+    #             sharding-columns: create_time
+    #             shardingAlgorithmName: userBehaviorlogSharding
+  ## db config
+  datasource:
+    druid:
+      stat-view-servlet:
+        enabled: true
+        login-username: admin
+        login-password: ${ADMIN_PASSWORD}
+    dynamic:
+      hikari:
+        connection-timeout: 10000
+        idle-timeout: 600000
+        max-lifetime: 1800000
+        max-pool-size: 200
+        min-idle: 20
+      datasource:
+        master: # 主库数据源
+          driver-class-name: org.postgresql.Driver
+          url: jdbc:postgresql://postgres:5432/plss?currentSchema=plss-system&useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&allowMultiQueries=true&useSSL=true&serverTimezone=GMT%2B8
+          username: suwell
+          password: sw_1357924680
+          type: com.zaxxer.hikari.HikariDataSource
+          # driver-class-name: dm.jdbc.driver.DmDriver
+          # url: jdbc:dm://${dm-addr}?schema=""plss-system""&useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&allowMultiQueries=true&useSSL=true&serverTimezone=GMT%2B8
+          # username: ${dm-username}
+          # password: ${dm-password}
+          hikari:
+            connection-timeout: 10000
+            idle-timeout: 600000
+            max-lifetime: 1800000
+            max-pool-size: 200
+            min-idle: 20
+            data-source-properties:
+              cachePrepStmts: true
+              prepStmtCacheSize: 250
+              prepStmtCacheSqlLimit: 2048
+              useServerPrepStmts: true
+              rewriteBatchedStatements: true
+
+        #   driver-class-name: com.mysql.cj.jdbc.Driver
+        #   url: jdbc:mysql://localhost:3306/plss-system?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=true&serverTimezone=GMT%2B8
+        #   username: root
+        #   password: root
+        # slave: # 从库数据源
+        #   driver-class-name: 
+        #   url: 
+        #   username: 
+        #   password: 
+
+  flyway: ## flyway db 增量脚本配置
+    enabled: false # 是否开启flywary，默认 true
+    out-of-order: false #是否允许无序的迁移，默认false.
+    create-schemas: false # dm 必须
+    baseline-on-migrate: true #如果数据库不是空表，需要设置成 true，否则启动报错
+    baseline-version: 2.5.0.001.01.01.01001 #忽略 2.5.0.001.01.01.01001 版本以及之前的所有 migration
+    locations:
+      - classpath:db/release/migration/postgresql/base    ## 标品
+
+      
+## mybatis-plus config
+mybatis-plus:
+  type-aliases-package: com.suwell.plss.**.entity
+  mapper-locations: classpath*:mapper/postgresql/**/*Mapper.xml
+  # mapper-locations: classpath*:mapper/dm/*Mapper.xml
+
+# 收藏
+eventpush: 
+  collect:
+    enable: true
+  tableheader:
+    tableNames: rc_record
+    repoConfigId: 2199157464837
+
+xxl:
+  job:
+    enable: true
+    executor:
+      appname: plss-system
+      address: ""
+      ip: ""
+      port: 30000
+      # 执行器运行日志文件存储磁盘路径 [选填] ：需要对该路径拥有读写权限；为空则使用默认路径；
+      logpath: /tmp/xxljob/logs
+      logretentiondays: 10
+    admin:
+      addresses: http://plss-gateway:8064/system/v1/xxlJob
+    accessToken: suwell14176accessToken
+
+suwell:
+  slc:
+    url: http://slc:9521
+    license-name: onesystem
+    boot-check: false
+    connectTimeout: 10000
+    readTimeout: 30000
+  pushDbConfig: true
+#suwell:
+#  slc:
+#    url: ${SLC_URL}
+#    license-name: ${SLC_LICENSE_NAME}
+#    boot-check: ${SLC_CHECK_ON_BOOT}
+#    connectTimeout: ${SLC_CONNECT_TIMEOUT}
+#    readTimeout: ${SLC_READ_TIMEOUT}
+
+
+
+
+
+encrypt:
+  signature:
+    useThirdSign: false
+    jarAbsolutePath: /thirdjar
+    thirdSignImpl: com.suwell.plss.plugin.sample.thirdparty.signature.impl.ThirdPartySignatureImpl
+  common-encrypt:
+    useThirdEncrypt: false
+    jarAbsolutePath: /thirdjar
+    thirdEncryptImpl: com.suwell.plss.plugin.sample.thirdparty.encrypt.impl.ThirdPartyEncryptSample
+
+## 日志级别增量配置
+app: 
+  global: 
+    log_level: INFO

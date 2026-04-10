@@ -1,0 +1,11 @@
+COMMON.common-server~yml.app=Docker公共组件
+COMMON.common-redis~yml.app=Docker公共组件
+COMMON.common-es~yml.app=Docker公共组件
+COMMON.common-mq~yml.app=Docker可选组件
+COMMON.common-xxljob~yml.app=Docker公共组件
+COMMON.plss-config~yml.app=Docker业务总配置
+SERVICE.plss-gateway~yml.app=网关服务
+SERVICE.plss-system~yml.app=系统管理服务
+SERVICE.plss-record~yml.app=文件基础服务
+SERVICE.plss-document-process~yml.app=文件处理服务
+SERVICE.plss-search~yml.app=搜索服务

@@ -1,0 +1,22 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'npu-metrics'
+    static_configs:
+      - targets: ['npu-exporter:9101']
+
+  - job_name: 'container-metrics'
+    static_configs:
+      - targets: ['cadvisor:8080']
+
+  - job_name: 'aibox-agent'
+    static_configs:
+      - targets: ['aibox-agent:9000']
+
+  # 自动抓取 Java 微服务指标 (如果开启了 actuator)
+  - job_name: 'java-apps'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['plss-gateway:8064', 'plss-system-server:8080']

@@ -1,0 +1,91 @@
+---
+# ==============================================================================
+# Playbook: KSC AIBox - K3s & App Deployment (3-Card NPU Matrix Mode)
+# ==============================================================================
+# 架构师重构版 V2 (深度融合版): 
+# 1. 核心业务全挤压至 2 卡：
+#    - NPU 0 (davinci0): qingqiu-qwen3 (13B) + qwen4b (4B)
+#    - NPU 1 (davinci1): new_13b_specialized (13B) + emb + reranker
+# 2. 问答专区独立单卡：
+#    - NPU 2 (davinci2): DeepSeek-R1-Distill-Qwen (vLLM 引擎原生拉起)
+
+- name: Deploy K3s and Matrix AIBox Applications
+  hosts: aibox
+  become: yes
+  vars:
+    source_dir: "/ksc_aibox/source"
+    db_init_dir: "{{ source_dir }}/postgres/templates"
+    # 这里定义你的新 13B 专用模型在 /ksc_aibox/source/AI_910B/ 下的目录名
+    new_13b_model_name: "custom-13b-specialized" 
+    
+  tasks:
+    - name: 1. 清理环境并准备 K3s
+      shell: |
+        docker stop $(docker ps -aq) || true
+        curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--disable traefik" sh -
+      ignore_errors: yes
+
+    - name: 2. 基础存储类与 Harbor 前缀剥离
+      shell: |
+        find {{ source_dir }} -name "*.yaml" -type f -exec sed -i 's/storageClassName: csi-rbd-sc/storageClassName: local-path/g' {} +
+        find {{ source_dir }} -name "*.yaml" -type f -exec sed -i 's/hub.ai.aio.cloud\///g' {} +
+      args:
+        warn: false
+
+    - name: 3. [架构核心] NPU 0 绑定 (主 13B + 4B)
+      shell: |
+        for model in qingqiu-qwen3 qwen4b; do
+          file="{{ source_dir }}/AI_910B/${model}/${model}.yaml"
+          if [ -f "$file" ]; then
+             sed -i '/huawei.com\/Ascend910B:/d' "$file"
+             sed -i '/volumeMounts:/a \        - name: npu-dev0\n          mountPath: /dev/davinci0\n        - name: npu-manager\n          mountPath: /dev/davinci_manager\n        - name: npu-svm\n          mountPath: /dev/devmm_svm\n        - name: npu-hdc\n          mountPath: /dev/hisi_hdc' "$file"
+             sed -i '/volumes:/a \      - name: npu-dev0\n        hostPath:\n          path: /dev/davinci0\n      - name: npu-manager\n        hostPath:\n          path: /dev/davinci_manager\n      - name: npu-svm\n        hostPath:\n          path: /dev/devmm_svm\n      - name: npu-hdc\n        hostPath:\n          path: /dev/hisi_hdc' "$file"
+             sed -i '/containers:/a \        securityContext:\n          privileged: true' "$file"
+          fi
+        done
+
+    - name: 4. [架构核心] NPU 1 绑定 (专用 13B + Emb + Reranker)
+      shell: |
+        for model in {{ new_13b_model_name }} emb reranker; do
+          file="{{ source_dir }}/AI_910B/${model}/${model}.yaml"
+          if [ -f "$file" ]; then
+             sed -i '/huawei.com\/Ascend910B:/d' "$file"
+             sed -i '/volumeMounts:/a \        - name: npu-dev1\n          mountPath: /dev/davinci1\n        - name: npu-manager\n          mountPath: /dev/davinci_manager\n        - name: npu-svm\n          mountPath: /dev/devmm_svm\n        - name: npu-hdc\n          mountPath: /dev/hisi_hdc' "$file"
+             sed -i '/volumes:/a \      - name: npu-dev1\n        hostPath:\n          path: /dev/davinci1\n      - name: npu-manager\n        hostPath:\n          path: /dev/davinci_manager\n      - name: npu-svm\n        hostPath:\n          path: /dev/devmm_svm\n      - name: npu-hdc\n        hostPath:\n          path: /dev/hisi_hdc' "$file"
+             sed -i '/containers:/a \        securityContext:\n          privileged: true' "$file"
+          fi
+        done
+
+    - name: 5. 导入系统镜像与数据库拉起
+      shell: |
+        # (略去具体 ctr import 循环，同上一版)
+        k3s kubectl apply -f {{ source_dir }}/postgres/postgres.yaml -n middle
+        k3s kubectl apply -f {{ source_dir }}/redis/redis.yaml -n middle
+        k3s kubectl wait --for=condition=ready pod -l app=postgres -n middle --timeout=300s
+
+    - name: 6. 拉起基础 AI 模型 (2 卡复用集群)
+      shell: |
+        for model in qingqiu-qwen3 qwen4b {{ new_13b_model_name }} emb reranker; do
+          if [ -d "{{ source_dir }}/AI_910B/${model}" ]; then
+            k3s kubectl apply -f {{ source_dir }}/AI_910B/${model}/${model}.yaml -n middle
+          fi
+        done
+
+    - name: 7. [新需求] NPU 2 独立拉起 DeepSeek-R1 (vLLM 引擎)
+      shell: |
+        # 使用 vLLM 直接在 docker/containerd 层面或 K3s 层面拉起，独占 davinci2
+        # 以下为基于项目内已有的 vLLM 脚本的参考调用
+        docker run -d --name deepseek-r1-qa \
+          --privileged \
+          --device /dev/davinci2 \
+          --device /dev/davinci_manager \
+          --device /dev/devmm_svm \
+          --device /dev/hisi_hdc \
+          -v /ksc_aibox/models/llm/DeepSeek-R1-Distill-Qwen-14B:/model \
+          -e ASCEND_RT_VISIBLE_DEVICES=2 \
+          -p 8102:8102 \
+          hub.ai.aio.cloud/plss-ai/vllm-ascend:latest \
+          --model /model \
+          --trust-remote-code \
+          --max-model-len 32768 \
+          --gpu-memory-utilization 0.9

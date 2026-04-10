@@ -1,4 +1,4 @@
-# Cline/Roo Code Rules — KSC AIBox
+# Codex Rules — KSC AIBox
 
 ## 🚀 启动时标准动作（必读！）
 
@@ -36,6 +36,22 @@
 
 ---
 
+## 状态更新规则
+
+> **任何操作后，必须更新协同指挥文档**
+
+| 场景 | 更新位置 | 更新格式 |
+|------|----------|----------|
+| **完成任务后** | 待办任务看板 | 标注 `[✅ 完成 by {Agent} @ {HH:MM}]` |
+| **遇到阻塞** | 问题与阻塞 | 登记新问题 |
+| **Git提交后** | 操作日志 | `[HH:MM] [Agent] 操作描述 → ✅ 提交ID` |
+| **SSH操作后** | 容器状态 | 更新容器状态表格 |
+| **会话结束后** | 操作日志 | 总结本次会话的主要操作 |
+
+**更新文件**: `docs/MULTI-AGENT-COMMAND-CENTER.md`
+
+---
+
 ## 项目上下文
 
 本项目为 **KSC AIBox**（金山政务AI一体机），基于 Huawei Ascend 910B NPU + openEuler + Ansible 自动化部署。
@@ -63,7 +79,7 @@
 
 ## AI Agent Skills (54个)
 
-本项目包含 54 个 AI Agent Skills，定义在 `src/agent-skills/` 目录下。每个技能目录包含 `SKILL.md` 定义文件。
+本项目包含 54 个 AI Agent Skills，定义在 `src/agent-skills/` 目录下。
 
 ### 使用技能
 
@@ -71,34 +87,6 @@
 1. 查阅 `AGENTS.md` 中的技能索引表，找到对应的技能目录
 2. 读取 `src/agent-skills/<skill-name>/SKILL.md` 获取详细执行指南
 3. 技能目录中可能包含 `references/`、`scripts/`、`templates/` 等辅助资源
-
-### 常用技能分类
-
-| 分类 | 技能数 | 覆盖范围 |
-|------|--------|----------|
-| 环境部署 | 5 | Docker/NPU驱动/CANN/ATC模型转换/HCCL测试 |
-| AscendC算子 | 12 | 从需求→设计→代码→编译→精度→性能→优化全流程 |
-| CATLASS算子 | 4 | 矩阵算子设计、开发、优化 |
-| Triton算子 | 9 | Triton 算子设计、开发、精度/性能评估 |
-| Megatron迁移 | 4 | 变更分析、提交跟踪、影响映射、迁移生成 |
-| MindSpeed测试 | 7 | 代码理解、测试生成、覆盖率分析 |
-| NPU运维 | 6 | 设备管理、适配审查、Profiling分析 |
-| 通用工具 | 7 | Bug修复、测试生成、Python重构、安全审计 |
-
----
-
-## 状态更新规则
-
-> **任何操作后，必须更新协同指挥文档**
-
-| 场景 | 更新位置 | 更新格式 |
-|------|----------|----------|
-| **完成任务后** | 待办任务看板 | 标注 `[✅ 完成 by {Agent} @ {HH:MM}]` |
-| **遇到阻塞** | 问题与阻塞 | 登记新问题 |
-| **Git提交后** | 操作日志 | `[HH:MM] [Agent] 操作描述 → ✅ 提交ID` |
-| **SSH操作后** | 容器状态 | 更新容器状态表格 |
-
-**更新文件**: `docs/MULTI-AGENT-COMMAND-CENTER.md`
 
 ---
 

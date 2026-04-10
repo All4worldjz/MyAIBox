@@ -241,31 +241,63 @@ init_databases() {
 
 import_nacos_config() {
     log_info "导入Nacos配置..."
+
+    local package_path=""
+
+    if [ -f "${SOURCE_DIR}/nacos/templates/nacos-config-docker-3.7.0.zip" ]; then
+        package_path="${SOURCE_DIR}/nacos/templates/nacos-config-docker-3.7.0.zip"
+    elif [ -f "${SOURCE_DIR}/nacos/templates/nacos-config-ytj-3.7.0.zip" ]; then
+        package_path="${SOURCE_DIR}/nacos/templates/nacos-config-ytj-3.7.0.zip"
+    fi
     
-    if [ -f "${SOURCE_DIR}/nacos/templates/nacos-config-ytj-3.7.0.zip" ]; then
+    if [ -n "${package_path}" ]; then
         log_info "等待Nacos启动..."
         sleep 15
-        
-        # 复制配置文件到Nacos容器
-        docker cp ${SOURCE_DIR}/nacos/templates/nacos-config-ytj-3.7.0.zip nacos:/tmp/nacos-config.zip
-        
-        # 在Nacos容器中解压并导入配置
-        docker exec nacos bash -c '
-            cd /tmp
-            unzip -o nacos-config.zip
-            # 使用Nacos API导入配置
-            for file in *.yaml *.yml *.properties; do
-                if [ -f "$file" ]; then
-                    curl -X POST "http://localhost:8848/nacos/v1/cs/configs" \
-                        -d "dataId=${file}" \
-                        -d "group=DEFAULT_GROUP" \
-                        -d "content=$(cat ${file})" \
-                        -d "type=yaml" \
-                        -d "username=nacos" \
-                        -d "password=${NACOS_PASSWORD}"
-                fi
-            done
-        ' 2>/dev/null || log_warning "Nacos配置导入失败"
+
+        local import_dir="/tmp/nacos-config-import"
+        local token=""
+
+        rm -rf "${import_dir}"
+        mkdir -p "${import_dir}"
+        unzip -oq "${package_path}" -d "${import_dir}"
+
+        # Docker Compose 环境下修正常见的 K8s 服务名。
+        perl -0pi -e '
+            s/redis-svc/redis/g;
+            s/postgresql-service/postgres/g;
+            s/minio-service/minio/g;
+            s/slc-svc/slc/g;
+            s/rabbitmq-svc/rabbitmq/g;
+            s/elasticsearch-cluster-ss-0\.elasticsearch-cluster-svc-headless:9200,elasticsearch-cluster-ss-1\.elasticsearch-cluster-svc-headless:9200,elasticsearch-cluster-ss-2\.elasticsearch-cluster-svc-headless:9200/elasticsearch:9200/g;
+            s/ocr-svc:8090/plss-doc-proc:8063/g;
+        ' "${import_dir}"/COMMON/*.yml "${import_dir}"/SERVICE/*.yml
+
+        token="$(curl -s -X POST "http://127.0.0.1:38848/nacos/v1/auth/users/login" \
+            -d "username=nacos" \
+            -d "password=nacos" | sed -n 's/.*"accessToken":"\([^"]*\)".*/\1/p')"
+
+        if [ -z "${token}" ]; then
+            log_warning "Nacos登录失败，跳过配置导入"
+            return
+        fi
+
+        for file in "${import_dir}"/COMMON/*.yml; do
+            [ -f "${file}" ] || continue
+            curl -s -X POST "http://127.0.0.1:38848/nacos/v1/cs/configs?accessToken=${token}" \
+                --data-urlencode "dataId=$(basename "${file}")" \
+                --data-urlencode "group=COMMON" \
+                --data-urlencode "content@${file}" \
+                --data-urlencode "type=yaml" >/dev/null || log_warning "COMMON 导入失败: $(basename "${file}")"
+        done
+
+        for file in "${import_dir}"/SERVICE/*.yml; do
+            [ -f "${file}" ] || continue
+            curl -s -X POST "http://127.0.0.1:38848/nacos/v1/cs/configs?accessToken=${token}" \
+                --data-urlencode "dataId=$(basename "${file}")" \
+                --data-urlencode "group=SERVICE" \
+                --data-urlencode "content@${file}" \
+                --data-urlencode "type=yaml" >/dev/null || log_warning "SERVICE 导入失败: $(basename "${file}")"
+        done
         
         log_success "Nacos配置导入完成"
     else

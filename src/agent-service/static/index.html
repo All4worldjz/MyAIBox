@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>KSC AIBox | 初始化向导</title>
+    <style>
+        :root { --primary: #0062ff; --bg: #0a0a0c; --card: #16161a; --text: #e0e0e6; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+        .wizard-card { background: var(--card); padding: 40px; border-radius: 12px; width: 500px; box-shadow: 0 20px 50px rgba(0,0,0,0.5); border: 1px solid #2a2a30; }
+        .step { display: none; }
+        .step.active { display: block; animation: fadeIn 0.5s; }
+        h1 { font-size: 24px; margin-bottom: 10px; color: #fff; }
+        p { color: #888; font-size: 14px; margin-bottom: 30px; }
+        .input-group { margin-bottom: 20px; }
+        label { display: block; margin-bottom: 8px; font-size: 12px; text-transform: uppercase; color: #666; }
+        input { width: 100%; padding: 12px; background: #000; border: 1px solid #333; color: #fff; border-radius: 6px; box-sizing: border-box; }
+        .btn-row { display: flex; justify-content: space-between; margin-top: 40px; }
+        button { padding: 12px 24px; border-radius: 6px; border: none; cursor: pointer; font-weight: 600; }
+        .btn-next { background: var(--primary); color: #fff; }
+        .btn-prev { background: transparent; color: #666; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .loader { width: 40px; height: 40px; border: 3px solid #333; border-top-color: var(--primary); border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 20px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div class="wizard-card">
+        <!-- Step 1: Welcome -->
+        <div class="step active" id="step1">
+            <h1>欢迎使用 KSC AIBox</h1>
+            <p>本向导将引导您完成政务 AI 一体机的初始化配置。请确保网络连接正常。</p>
+            <div class="btn-row">
+                <div></div>
+                <button class="btn-next" onclick="nextStep(2)">开始配置</button>
+            </div>
+        </div>
+
+        <!-- Step 2: Network -->
+        <div class="step" id="step2">
+            <h1>网络配置</h1>
+            <p>配置一体机的静态物理 IP 地址。</p>
+            <div class="input-group">
+                <label>IPv4 地址</label>
+                <input type="text" value="10.212.128.192">
+            </div>
+            <div class="input-group">
+                <label>子网掩码</label>
+                <input type="text" value="255.255.255.0">
+            </div>
+            <div class="btn-row">
+                <button class="btn-prev" onclick="nextStep(1)">上一步</button>
+                <button class="btn-next" onclick="nextStep(3)">下一步</button>
+            </div>
+        </div>
+
+        <!-- Step 3: License -->
+        <div class="step" id="step3">
+            <h1>授权激活</h1>
+            <p>请输入您的 SLC 授权密钥以激活 AI 推理能力。</p>
+            <div class="input-group">
+                <label>License Key</label>
+                <input type="text" placeholder="XXXX-XXXX-XXXX-XXXX">
+            </div>
+            <div class="btn-row">
+                <button class="btn-prev" onclick="nextStep(2)">上一步</button>
+                <button class="btn-next" onclick="nextStep(4)">下一步</button>
+            </div>
+        </div>
+
+        <!-- Step 4: Storage -->
+        <div class="step" id="step4">
+            <h1>外部存储 (可选)</h1>
+            <p>挂载内网 NAS 用于存放海量公文附件。</p>
+            <div class="input-group">
+                <label>NFS/SMB 路径</label>
+                <input type="text" placeholder="192.168.1.100:/share/docs">
+            </div>
+            <div class="btn-row">
+                <button class="btn-prev" onclick="nextStep(3)">上一步</button>
+                <button class="btn-next" onclick="doInit()">一键点火</button>
+            </div>
+        </div>
+
+        <!-- Step 5: Progress -->
+        <div class="step" id="step5" style="text-align: center;">
+            <div class="loader"></div>
+            <h1>正在初始化系统...</h1>
+            <p>系统正在根据 NPU 拓扑分配算力资源并启动微服务集群。这可能需要 3-5 分钟，请勿关闭浏览器。</p>
+        </div>
+    </div>
+
+    <script>
+        function nextStep(n) {
+            document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+            document.getElementById('step' + n).classList.add('active');
+        }
+        function doInit() {
+            nextStep(5);
+            // 模拟调用 API 触发 Ansible
+            setTimeout(() => {
+                window.location.href = "/admin";
+            }, 5000);
+        }
+    </script>
+</body>
+</html>

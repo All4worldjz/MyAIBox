@@ -1,0 +1,4 @@
+# NPU 算力资源池定义 (物理卡号: 1, 2, 3, 4)
+# 该文件由 Ansible 动态生成，作为一体机算力拓扑的 Single Source of Truth
+npu_topology:
+{{ npu_topology | to_nice_yaml(indent=2) }}

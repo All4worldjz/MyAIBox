@@ -1,0 +1,274 @@
+spring:
+  ## db config
+  datasource:
+    # druid:
+    #   stat-view-servlet:
+    #     enabled: true
+    #     login-username: admin
+    #     login-password: 123456
+    dynamic:
+      hikari:
+        connection-timeout: 10000
+        idle-timeout: 600000
+        max-lifetime: 1800000
+        max-pool-size: 200
+        min-idle: 20
+      datasource:
+        master: # 主库数据源
+          driver-class-name: org.postgresql.Driver
+          url: jdbc:postgresql://postgres:5432/plss?currentSchema=plss-record&useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&allowMultiQueries=true&useSSL=true&serverTimezone=GMT%2B8
+          username: suwell
+          password: ${DB_PASSWORD}
+          type: com.zaxxer.hikari.HikariDataSource
+          # driver-class-name: dm.jdbc.driver.DmDriver
+          # url: jdbc:dm://${dm-addr}?schema=""plss-record""&useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&allowMultiQueries=true&useSSL=true&serverTimezone=GMT%2B8
+          # username: ${dm-username}
+          # password: ${dm-password}
+        # slave: # 从库数据源
+        #   driver-class-name: 
+        #   url: 
+        #   username: 
+        #   password: 
+          hikari:
+            connection-timeout: 10000
+            idle-timeout: 600000
+            max-lifetime: 1800000
+            max-pool-size: 200
+            min-idle: 20
+            data-source-properties:
+              cachePrepStmts: true
+              prepStmtCacheSize: 250
+              prepStmtCacheSqlLimit: 2048
+              useServerPrepStmts: true
+              rewriteBatchedStatements: true
+
+
+  # 分库分表配置【增量配置】
+  shardingsphere:
+    datasource:
+      names: logic-record
+      logic-record:
+        type: ${spring.datasource.dynamic.datasource.master.type}
+        driver-class-name: ${spring.datasource.dynamic.datasource.master.driver-class-name}
+        jdbc-url: ${spring.datasource.dynamic.datasource.master.url}
+        username: ${spring.datasource.dynamic.datasource.master.username}
+        password: ${spring.datasource.dynamic.datasource.master.password}
+        connection-timeout: ${spring.datasource.dynamic.hikari.connection-timeout}
+        idle-timeout: ${spring.datasource.dynamic.hikari.idle-timeout}
+        max-lifetime: ${spring.datasource.dynamic.hikari.max-lifetime}
+        max-pool-size: ${spring.datasource.dynamic.hikari.max-pool-size}
+        min-idle: ${spring.datasource.dynamic.hikari.min-idle}
+    props:
+      sql-show: true
+    # rules:
+    #   sharding:
+    #     sharding-algorithms:
+    #       alg_inline_rc_record_metadata_value_recordId:
+    #         props:
+    #           algorithm-expression: rc_record_metadata_value_$->{record_id % 40}
+    #           allow-range-query-with-inline-sharding: true
+    #         type: INLINE
+    #       LogRecordViewSharding:
+    #         type: plss-log-record-view-sharding
+    #       fileComplexKeySharding:
+    #         type: plss-file-complex-key-sharding
+    #       fileMD5hexComplexKeySharding:
+    #         type: plss-file-md5hex-complex-key-sharding
+    #       documentComplexKeySharding:
+    #         type: plss-document-complex-key-sharding
+    #       documentMd5ComplexKeySharding:
+    #         type: plss-document-md5-complex-key-sharding
+    #     tables:
+    #       rc_record_metadata_value:
+    #         actual-data-nodes: logic-record.rc_record_metadata_value_$->{0..39}
+    #         table-strategy:
+    #           standard:
+    #             sharding-column: record_id
+    #             sharding-algorithm-name: alg_inline_rc_record_metadata_value_recordId
+    #       rc_log_recordview:
+    #         actual-data-nodes: logic-record.rc_log_recordview_$->{2024..2027}_q$->{1..4}
+    #         table-strategy:
+    #           complex:
+    #             sharding-columns: create_time
+    #             shardingAlgorithmName: LogRecordViewSharding
+    #       rc_file:
+    #         actual-data-nodes: logic-record.rc_file_$->{0..29}
+    #         table-strategy:
+    #           complex:
+    #             sharding-columns: id
+    #             shardingAlgorithmName: fileComplexKeySharding
+    #       rc_file_md5_rel:
+    #         actual-data-nodes: logic-record.rc_file_md5_rel_$->{0..19}
+    #         table-strategy:
+    #           complex:
+    #             sharding-columns: md5_hex
+    #             shardingAlgorithmName: fileMD5hexComplexKeySharding
+    #       rc_document:
+    #         actual-data-nodes: logic-record.rc_document_$->{0..39}
+    #         table-strategy:
+    #           complex:
+    #             sharding-columns: record_id
+    #             shardingAlgorithmName: documentComplexKeySharding
+    #       rc_document_md5_rel:
+    #         actual-data-nodes: logic-record.rc_document_md5_rel_$->{0..39}
+    #         table-strategy:
+    #           complex:
+    #             sharding-columns: md5_hex
+    #             shardingAlgorithmName: documentMd5ComplexKeySharding
+
+
+
+  flyway: ## flyway db 增量脚本配置
+    enabled: false # 是否开启flywary，默认 true
+    out-of-order: false #是否允许无序的迁移，默认false.
+    create-schemas: false # dm 必须
+    baseline-on-migrate: true #如果数据库不是空表，需要设置成 true，否则启动报错
+    baseline-version: 2.5.0.001.01.01.01001 #忽略 2.5.0.001.01.01.01001 版本以及之前的所有 migration
+    locations:
+      - classpath:db/release/migration/postgresql/base    ## 标品
+      
+## mybatis-plus config
+mybatis-plus:
+  type-aliases-package: com.suwell.plss.**.entity
+  mapper-locations: classpath*:mapper/postgresql/**/*Mapper.xml
+  #mapper-locations: classpath*:mapper/dm/**/*Mapper.xml
+
+
+
+# # Minio配置530之后不用了
+# oss:
+#   domain: ${minio-addr}
+#   proxyDomain: ${minio-proxy}
+#   accessKey: ${minio-accessKey}
+#   secretKey: ${minio-secretKey}
+#   bucketName: ${minio-bucketName}
+#   # 7天 7*24*60*60
+#   expiry: 604800
+
+thread-pool:
+  config:
+    data-permission-check:
+      core-size: 200
+      maximum-pool-size: 500
+      keep-alive-time: 30
+      blocking-queue-size: 1000
+    data-permission-operation:
+      core-size: 200
+      maximum-pool-size: 500
+      keep-alive-time: 30
+      blocking-queue-size: 1000
+    data-search-packet:
+      core-size: 100
+      maximum-pool-size: 300
+      keep-alive-time: 30
+      blocking-queue-size: 1000
+    folder-query:
+      core-size: 30
+      maximum-pool-size: 100
+      keep-alive-time: 30
+      blocking-queue-size: 2000
+    data-storage-warehouse:
+      core-size: 100
+      maximum-pool-size: 200
+      keep-alive-time: 30
+      blocking-queue-size: 2000
+    detail-interface:
+      core-size: 20
+      maximum-pool-size: 50
+      keep-alive-time: 30
+      blocking-queue-size: 1000
+    data-process-task:
+      core-size: 20
+      maximum-pool-size: 50
+      keep-alive-time: 30
+      blocking-queue-size: 1000
+    mq-retry-msg:
+      core-size: 5
+      maximum-pool-size: 50
+      keep-alive-time: 30
+      blocking-queue-size: 1000
+#文件基础服务功能配置
+plss:
+  feature:
+    ## 第三方功能配置信息:1-同步调用2-异步调用3-关闭
+    convertOfdApi: 2
+    ocrTextApi: 2
+    extractCategoryApi: 2
+    extractDigestApi: 2
+    extractVectorApi: 3
+    extractEntitiesApi: 3
+    extractKeywordApi: 3
+        
+# cma:
+#   manager:
+#     tenantId: 1612752027141
+#     #发文机关元数据项id
+#     issuingAuthorityId: 1121551467781
+#     #发布日期元数据项id
+#     dateOfPostingId: 1121649841157
+#     #文号元数据项id
+#     documentSymbolId: 1121443148293
+
+
+## 文件加密存储相关的配置，不支持热更新，修改时需要重启record服务
+crypto:
+  ## 文件加密总开关，默认打开，如果为false，一下的配置均失效。且该开关不得轻易修改，后果很严重
+  enabled: true
+  ## 是否有三方加密实现
+  use-third: false
+  ## 三方加密所处的jar包目录，use-third为true时必填且有效，启动会校验
+  jar-absolute-path: E:/
+  ## 三方加密jar包中使用的实现，use-third为true时必填且有效，启动会校验
+  impl: com.suwell.plss.plugin.sample.thirdparty.crypto.impl.ThirdPartyCryptoSample
+  ## 每个项目必须要有的项目名，项目开始是会分配固定的
+  project-name: project
+  ## 每个项目必须要有的项目代码，本质是加密的版本号。项目开始时会分配固定范围的
+  project-code: 1
+  ## 对外暴露的url，用于外部访问地址使用，不配置会解析容器ip
+  # export-url: http://plss-web/plss/prod-api
+
+dromara:
+  x-file-storage:
+    ##默认使用的存储平台
+    default-platform: suwell-minio-private
+    minio:
+       ## 私有桶
+      - platform: suwell-minio-private
+        auto-create-bucket: true
+        enable-storage: true
+        access-key: admin
+        secret-key: G5pJ2kUq3L8M
+        bucket-name: itsuwell
+        end-point: http://minio:9000
+        ## 公有桶
+      - platform: suwell-minio-public
+        enable-storage: true
+        access-key: admin
+        secret-key: G5pJ2kUq3L8M
+        bucket-name: public
+        end-point: http://minio:9000
+        ## 公有桶需要配置此参数，用于访问永久的图片等
+
+xxl:
+  job:
+    enable: true
+    executor:
+      appname: plss_record
+      address: ""
+      ip: ""
+      port: 30000
+      # 执行器运行日志文件存储磁盘路径 [选填] ：需要对该路径拥有读写权限；为空则使用默认路径；
+      logpath: /tmp/xxljob/logs
+      logretentiondays: 10
+    admin:
+      addresses: http://plss-gateway:8064/system/v1/xxlJob
+    accessToken: suwell14176accessToken   
+
+suwell: 
+  temp-dir: /var/tmp/record
+
+
+## 日志级别增量配置
+app: 
+  global: 
+    log_level: INFO

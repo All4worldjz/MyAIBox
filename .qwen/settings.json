@@ -56,5 +56,57 @@
       "Bash(git *)"
     ]
   },
-  "$version": 3
+  "$version": 3,
+
+  "startup_sync": {
+    "enabled": true,
+    "description": "Qwen Code 启动时的标准同步动作",
+    "steps": [
+      {
+        "order": 1,
+        "action": "读取协同指挥文档",
+        "file": "docs/MULTI-AGENT-COMMAND-CENTER.md",
+        "purpose": "获取最新项目状态、待办任务、活跃问题"
+      },
+      {
+        "order": 2,
+        "action": "读取项目上下文",
+        "file": "QWEN.md",
+        "purpose": "加载项目概况、硬件配置、部署命令"
+      },
+      {
+        "order": 3,
+        "action": "读取技能索引",
+        "file": "AGENTS.md",
+        "purpose": "获取54个AI Agent技能列表"
+      },
+      {
+        "order": 4,
+        "action": "检查Git状态",
+        "command": "git status && git log --oneline -3",
+        "purpose": "确认本地仓库状态"
+      },
+      {
+        "order": 5,
+        "action": "查看待办任务",
+        "section": "待办任务看板",
+        "file": "docs/MULTI-AGENT-COMMAND-CENTER.md",
+        "purpose": "认领P0/P1优先级任务"
+      },
+      {
+        "order": 6,
+        "action": "检查活跃问题",
+        "section": "问题与阻塞",
+        "file": "docs/MULTI-AGENT-COMMAND-CENTER.md",
+        "purpose": "确认是否有待解决的问题需要处理"
+      }
+    ],
+    "update_rules": [
+      "任务完成后立即更新 MULTAI-AGENT-COMMAND-CENTER.md",
+      "遇到阻塞立即登记问题与阻塞章节",
+      "Git提交后更新操作日志章节",
+      "SSH操作后更新容器状态章节",
+      "更新格式: [HH:MM] [Qwen Code] 操作描述 → 结果"
+    ]
+  }
 }

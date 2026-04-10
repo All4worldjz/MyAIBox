@@ -1,0 +1,38 @@
+spring:
+  ## es config 注意: es的连接地址 只支持http + 密码方式通信
+  ## 1.【单机】Docker Compose 单节点示例: http://elasticsearch:9200
+  ## 2.【集群】Docker Compose 多节点示例: http://elasticsearch-1:9200,http://elasticsearch-2:9200,http://elasticsearch-3:9200
+  elasticsearch: ##集群地址配置逗号分隔
+    keepAlive: 30
+    uris: http://elasticsearch:9200
+    username: elastic
+    password: ${ES_PASSWORD}
+    bboss:
+      elasticUser: elastic
+      elasticPassword: ${ES_PASSWORD}
+      elasticsearch: # elasticsearch地址前面添加https协议头，并设置useHttps属性为true
+        # useHttps: true
+        rest: ##集群地址配置逗号分隔
+          hostNames: http://elasticsearch:9200
+        dateFormat: yyyy.MM.dd
+        timeZone: Asia/Shanghai
+        showTemplate: true
+        discoverHost: false
+      dslfile:
+        refreshInterval: -1
+      http:
+        timeoutConnection: 500000
+        timeoutSocket: 500000
+        connectionRequestTimeout: 500000
+        retryTime: 10
+        maxLineLength: -1
+        maxHeaderCount: 2000
+        maxTotal: 4000
+        defaultMaxPerRoute: 2000
+        soReuseAddress: false
+        soKeepAlive: false
+        timeToLive: 36000000
+        keepAlive: 36000000
+        keystore:
+        keyPassword:
+        hostnameVerifier:

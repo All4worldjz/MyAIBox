@@ -1,0 +1,176 @@
+version: '3.3'
+
+services:
+  # ==========================================
+  # AIBox 管理 Agent (V3.1 - 强化离线布控)
+  # ==========================================
+  aibox-agent:
+    image: python:3.11-slim
+    container_name: aibox-agent
+    privileged: true
+    volumes:
+      - /ksc_aibox/scripts/agent:/app
+      - /ksc_aibox:/ksc_aibox
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /usr/bin/docker:/usr/local/bin/docker
+      - /usr/lib64/libltdl.so.7:/usr/lib/aarch64-linux-gnu/libltdl.so.7
+      - /usr/local/sbin/npu-smi:/usr/local/sbin/npu-smi
+      - /usr/local/Ascend/driver:/usr/local/Ascend/driver
+    devices:
+      - /dev/davinci_manager:/dev/davinci_manager
+      - /dev/devmm_svm:/dev/devmm_svm
+      - /dev/hisi_hdc:/dev/hisi_hdc
+    environment:
+      - LD_LIBRARY_PATH=/usr/local/Ascend/driver/lib64:/usr/local/Ascend/driver/lib64/common:/usr/local/Ascend/driver/lib64/driver
+    working_dir: /app
+    command: >
+      sh -c "pip install --no-index --find-links=/app/packages /app/packages/*.whl &&
+             python main.py"
+    ports:
+      - "9000:9000"
+    networks:
+      - ksc-aibox-network
+    restart: always
+
+  # ==========================================
+  # 数据库与中间件层
+  # ==========================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres
+    environment:
+      - POSTGRES_PASSWORD=sw_1357924680
+    volumes:
+      - /ksc_aibox/data/postgres:/var/lib/postgresql/data
+      - /ksc_aibox/source/postgres/templates:/docker-entrypoint-initdb.d
+    networks:
+      - ksc-aibox-network
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    volumes:
+      - /ksc_aibox/data/redis:/data
+    networks:
+      - ksc-aibox-network
+    restart: always
+
+  nacos:
+    image: hub.ai.aio.cloud/middleware/nacos-server:v2.3.2-slim
+    container_name: nacos
+    environment:
+      - PREFER_HOST_MODE=hostname
+      - MODE=standalone
+      - NACOS_AUTH_ENABLE=true
+      - NACOS_AUTH_IDENTITY_KEY=nacos
+      - NACOS_AUTH_IDENTITY_VALUE=nacos
+      - NACOS_AUTH_TOKEN=SecretKey012345678901234567890123456789012345678901234567890123456789
+    volumes:
+      - /ksc_aibox/data/nacos:/home/nacos/data
+      - /ksc_aibox/data/nacos-logs:/home/nacos/logs
+    networks:
+      - ksc-aibox-network
+    restart: always
+
+  # ==========================================
+  # Java 核心网关与前端
+  # ==========================================
+  plss-gateway:
+    image: hub.ai.aio.cloud/plss/plss-gateway-arm64:20251017-644-WPS
+    container_name: plss-gateway
+    environment: &java_env
+      - nacos_server=nacos:8848
+      - TZ=Asia/Shanghai
+      - AI_API_URL=http://ai-gateway:8000/api/v1/chat/completions/13b
+      - QA_API_URL=http://ai-gateway:8000/api/v1/chat/completions/qa
+    ports:
+      - "8064:8064"
+    volumes:
+      - /ksc_aibox/data/app/logs/gateway:/home/app/logs
+    networks:
+      - ksc-aibox-network
+    restart: always
+    depends_on:
+      - nacos
+
+  plss-web:
+    image: hub.ai.aio.cloud/cyl_arm/plss-web:20260329-7-kc
+    container_name: plss-web
+    ports:
+      - "80:80"
+    networks:
+      - ksc-aibox-network
+    restart: always
+
+  # ==========================================
+  # 业务逻辑微服务集群
+  # ==========================================
+  plss-system-server:
+    image: hub.ai.aio.cloud/plss/plss-system-server-arm64:20251225-1067-WPS
+    container_name: plss-system-server
+    environment: *java_env
+    networks:
+      - ksc-aibox-network
+    restart: always
+
+  plss-search-server:
+    image: hub.ai.aio.cloud/plss/plss-search-server-arm64:20251128-865-WPS
+    container_name: plss-search-server
+    environment: *java_env
+    networks:
+      - ksc-aibox-network
+    restart: always
+
+  plss-document-process-server:
+    image: hub.ai.aio.cloud/cyl_arm/plss-document-process-server:20260329-7-kc
+    container_name: plss-doc-proc
+    environment: *java_env
+    volumes:
+      - /ksc_aibox/data/documents:/data/documents
+    networks:
+      - ksc-aibox-network
+    restart: always
+
+  plss-nlp-draft:
+    image: hub.ai.aio.cloud/cyl_arm/plss-nlp-draft:20260329-7-kc
+    container_name: plss-nlp-draft
+    environment: *java_env
+    networks:
+      - ksc-aibox-network
+    restart: always
+
+  plss-record-server:
+    image: hub.ai.aio.cloud/cyl_arm/plss-record-server:20260329-7-kc
+    container_name: plss-record
+    environment: *java_env
+    networks:
+      - ksc-aibox-network
+    restart: always
+
+  ocr-ss:
+    image: hub.ai.aio.cloud/cyl_arm/ocr-ss:20260329-7-kc
+    container_name: ocr-ss
+    environment:
+      - TZ=Asia/Shanghai
+    networks:
+      - ksc-aibox-network
+    restart: always
+
+  # ==========================================
+  # WPS WebOffice 组件
+  # ==========================================
+  weboffice-cloudprovider:
+    image: hub.ai.aio.cloud/weboffice/10.4.2/arm/cloudprovider:20250108124812-f88b0656f2
+    container_name: wps-cp
+    networks:
+      - ksc-aibox-network
+    restart: always
+
+networks:
+  ksc-aibox-network:
+    external: true

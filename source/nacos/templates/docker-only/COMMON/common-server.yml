@@ -1,0 +1,93 @@
+spring:
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 500MB
+      max-request-size: 500MB
+  autoconfigure:
+    exclude: com.alibaba.druid.spring.boot.autoconfigure.DruidDataSourceAutoConfigure
+  mvc:
+    pathmatch:
+      matching-strategy: ant_path_matcher
+  jackson: # 配置日期格式化
+    date-format: yyyy-MM-dd HH:mm:ss  
+    time-zone: GMT+8
+
+server:
+  tomcat:
+    max-connections: 10000
+    accept-count: 1000
+    max-keep-alive-requests: 1000
+    keep-alive-timeout: 10000
+    connection-timeout: 20000
+    threads:
+      max: 500
+      min-spare: 100
+    
+
+# feign 配置
+feign:
+  sentinel:
+    enabled: true
+  okhttp:
+    enabled: true
+  httpclient:
+    enabled: false
+  client:
+    config:
+      default:
+        connectTimeout: 60000
+        readTimeout: 60000
+  compression:
+    request:
+      # enabled: true
+      enabled: false
+    response:
+      enabled: true
+
+management:
+  server:
+    port: ${METRICS_PORT:18081}
+  metrics:
+    enabled: true
+    export:
+      prometheus:
+        enabled: true
+    web:
+      server:
+        auto-time-requests: true
+    tags:
+      application: ${spring.application.name}
+  endpoints:
+    enabled-by-default: true
+    web:
+      path-mapping:
+        prometheus: metrics
+      discovery:
+        enabled: false
+      base-path: /
+      exposure:
+        include:
+          - prometheus
+          - health
+          - loggers
+    health:  
+      show-details: ALWAYS
+  health:    
+    neo4j:
+      enabled: false
+          
+## 需要交付开发人员自行注入环境变量
+pgw:
+  authUser: admin
+  authPassword: yitiji_admin@123
+
+
+## 配置修数据的开关，此开关默认关闭
+dp:
+  upgrade_data:
+    sync_switch: false
+
+app: 
+  tmp: 
+    folderpath: /swdata/builtin/application_tmp/

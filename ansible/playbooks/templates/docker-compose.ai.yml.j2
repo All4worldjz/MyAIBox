@@ -1,0 +1,150 @@
+version: '3.3'
+
+services:
+  # ==========================================
+  # AI 内部网关
+  # ==========================================
+  ai-gateway:
+    image: nginx:alpine
+    container_name: ai-gateway
+    volumes:
+      - /ksc_aibox/config/ai-nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "8000:80"
+    networks:
+      - ksc-aibox-network
+    restart: always
+
+{% if npu_topology.qingqiu_qwen3.enabled %}
+{% for i in range(npu_topology.qingqiu_qwen3.replicas) %}
+  qingqiu-qwen3-{{ i + 1 }}:
+    image: {{ npu_topology.qingqiu_qwen3.image }}
+    container_name: qingqiu-qwen3-{{ i + 1 }}
+    privileged: true
+    environment:
+      - ASCEND_RT_VISIBLE_DEVICES={{ npu_topology.qingqiu_qwen3.cards[i] }}
+      - MODEL_DIR={{ npu_topology.qingqiu_qwen3.model_container_path | basename }}
+    ports:
+      - "{{ 1030 + i }}:1025" # 使用 1030 起始端口，避开常用段
+    devices:
+      - /dev/davinci{{ npu_topology.qingqiu_qwen3.cards[i] }}:/dev/davinci{{ npu_topology.qingqiu_qwen3.cards[i] }}
+      - /dev/davinci_manager:/dev/davinci_manager
+      - /dev/devmm_svm:/dev/devmm_svm
+      - /dev/hisi_hdc:/dev/hisi_hdc
+    volumes:
+      - {{ npu_topology.qingqiu_qwen3.model_host_path }}:{{ npu_topology.qingqiu_qwen3.model_container_path }}
+      - /ksc_aibox/libs/compat-8.2:/usr/local/Ascend/compat-libs:ro
+      - /usr/local/Ascend/driver:/usr/local/Ascend/driver:ro
+      - /usr/local/sbin/npu-smi:/usr/local/sbin/npu-smi:ro
+      - /dev/shm:/dev/shm
+    networks:
+      - ksc-aibox-network
+    restart: always
+{% endfor %}
+{% endif %}
+
+{% if npu_topology.qa_specialized.enabled %}
+  qa-specialized-1:
+    image: {{ npu_topology.qa_specialized.image }}
+    container_name: qa-specialized-1
+    privileged: true
+    environment:
+      - ASCEND_RT_VISIBLE_DEVICES={{ npu_topology.qa_specialized.cards[0] }}
+      - MODEL_DIR={{ npu_topology.qa_specialized.model_container_path | basename }}
+    ports:
+      - "8102:1025"
+    devices:
+      - /dev/davinci{{ npu_topology.qa_specialized.cards[0] }}:/dev/davinci{{ npu_topology.qa_specialized.cards[0] }}
+      - /dev/davinci_manager:/dev/davinci_manager
+      - /dev/devmm_svm:/dev/devmm_svm
+      - /dev/hisi_hdc:/dev/hisi_hdc
+    volumes:
+      - {{ npu_topology.qa_specialized.model_host_path }}:{{ npu_topology.qa_specialized.model_container_path }}
+      - /ksc_aibox/libs/compat-8.2:/usr/local/Ascend/compat-libs:ro
+      - /usr/local/Ascend/driver:/usr/local/Ascend/driver:ro
+      - /usr/local/sbin/npu-smi:/usr/local/sbin/npu-smi:ro
+      - /dev/shm:/dev/shm
+    networks:
+      - ksc-aibox-network
+    restart: always
+{% endif %}
+
+{% if npu_topology.qwen4b.enabled %}
+  qwen4b-1:
+    image: {{ npu_topology.qwen4b.image }}
+    container_name: qwen4b-1
+    privileged: true
+    environment:
+      - ASCEND_RT_VISIBLE_DEVICES={{ npu_topology.qwen4b.cards[0] }}
+      - MODEL_DIR={{ npu_topology.qwen4b.model_container_path | basename }}
+    ports:
+      - "1040:1025" # 独立端口
+    devices:
+      - /dev/davinci{{ npu_topology.qwen4b.cards[0] }}:/dev/davinci{{ npu_topology.qwen4b.cards[0] }}
+      - /dev/davinci_manager:/dev/davinci_manager
+      - /dev/devmm_svm:/dev/devmm_svm
+      - /dev/hisi_hdc:/dev/hisi_hdc
+    volumes:
+      - {{ npu_topology.qwen4b.model_host_path }}:{{ npu_topology.qwen4b.model_container_path }}
+      - /ksc_aibox/libs/compat-8.2:/usr/local/Ascend/compat-libs:ro
+      - /usr/local/Ascend/driver:/usr/local/Ascend/driver:ro
+      - /usr/local/sbin/npu-smi:/usr/local/sbin/npu-smi:ro
+      - /dev/shm:/dev/shm
+    networks:
+      - ksc-aibox-network
+    restart: always
+{% endif %}
+
+{% if npu_topology.emb.enabled %}
+  emb-1:
+    image: {{ npu_topology.emb.image }}
+    container_name: emb-1
+    privileged: true
+    environment:
+      - ASCEND_RT_VISIBLE_DEVICES={{ npu_topology.emb.cards[0] }}
+    ports:
+      - "5377:5377"
+    devices:
+      - /dev/davinci{{ npu_topology.emb.cards[0] }}:/dev/davinci{{ npu_topology.emb.cards[0] }}
+      - /dev/davinci_manager:/dev/davinci_manager
+      - /dev/devmm_svm:/dev/devmm_svm
+      - /dev/hisi_hdc:/dev/hisi_hdc
+    volumes:
+      - {{ npu_topology.emb.model_host_path }}:/home/models/{{ npu_topology.emb.model_container_path | basename }}
+      - /ksc_aibox/libs/compat-8.2:/usr/local/Ascend/compat-libs:ro
+      - /usr/local/Ascend/driver:/usr/local/Ascend/driver:ro
+      - /usr/local/sbin/npu-smi:/usr/local/sbin/npu-smi:ro
+      - /dev/shm:/dev/shm
+    networks:
+      - ksc-aibox-network
+    restart: always
+{% endif %}
+
+{% if npu_topology.reranker.enabled %}
+  reranker-1:
+    image: {{ npu_topology.reranker.image }}
+    container_name: reranker-1
+    privileged: true
+    environment:
+      - ASCEND_RT_VISIBLE_DEVICES={{ npu_topology.reranker.cards[0] }}
+    ports:
+      - "5277:5277"
+    devices:
+      - /dev/davinci{{ npu_topology.reranker.cards[0] }}:/dev/davinci{{ npu_topology.reranker.cards[0] }}
+      - /dev/davinci_manager:/dev/davinci_manager
+      - /dev/devmm_svm:/dev/devmm_svm
+      - /dev/hisi_hdc:/dev/hisi_hdc
+    volumes:
+      - {{ npu_topology.reranker.model_host_path }}:/home/models/{{ npu_topology.reranker.model_container_path | basename }}
+      - /ksc_aibox/libs/compat-8.2:/usr/local/Ascend/compat-libs:ro
+      - /usr/local/Ascend/driver:/usr/local/Ascend/driver:ro
+      - /usr/local/sbin/npu-smi:/usr/local/sbin/npu-smi:ro
+      - /dev/shm:/dev/shm
+    networks:
+      - ksc-aibox-network
+    restart: always
+{% endif %}
+
+networks:
+  ksc-aibox-network:
+    external: true

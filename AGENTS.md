@@ -10,14 +10,22 @@
 
 开始工作前请阅读以下文件以加载项目上下文：
 
-| 文件 | 用途 |
-|------|------|
-| `QWEN.md` | 项目上下文（版本/硬件/部署命令） |
-| `GEMINI.md` | 项目技术栈说明 |
-| `docs/Agent.md` | AI Agent 协作指南 |
-| `docs/SKILL.md` | 项目实施技能与踩坑经验 |
-| `docs/SYSTEM-CONFIGURATION.md` | 系统配置文档 |
-| `docs/memory-management-architecture.md` | 内存管理架构 |
+| 文件 | 用途 | 优先级 |
+|------|------|--------|
+| `QWEN.md` | 项目上下文（版本/硬件/部署命令） | 🔴 必读 |
+| `docs/MULTI-AGENT-COMMAND-CENTER.md` | **多AI协同指挥中枢（最新状态+Codex工作记录）** | 🔴 **首先读取** |
+| `AGENTS.md` | 本文件（技能索引） | 🔴 必读 |
+| `docs/handoff.md` | 项目交接文档 | 🟡 建议 |
+| `docs/SKILL.md` | 技能经验文档 | 🟡 建议 |
+
+### 参与Agent
+
+| Agent | 角色 | 证据 | 配置 |
+|-------|------|------|------|
+| **Qwen Code** | 主力执行 (77% Git提交) | Co-authored-by | `.qwen/settings.json` |
+| **OpenAI Codex** | 架构规划 (117条会话) | `~/.codex/history.jsonl` | `~/.codex/config.toml` |
+| **Claude Code** | 辅助调试 (40+ SSH) | SSH操作日志 | `.claude/settings.local.json` |
+| **Gemini CLI** | 早期咨询 | 配置文件 | `GEMINI.md` |
 
 ### 关键路径
 

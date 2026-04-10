@@ -1,0 +1,330 @@
+version: '3.3'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres
+    environment:
+      - POSTGRES_PASSWORD=sw_1357924680
+      - POSTGRES_DB=plss
+      - POSTGRES_USER=postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - /ksc_aibox/data/postgres:/var/lib/postgresql/data
+      - /ksc_aibox/source/postgres/templates:/docker-entrypoint-initdb.d:ro
+    networks:
+      - ksc-aibox-network
+    restart: always
+
+  mysql:
+    image: hub.ai.aio.cloud/middleware/mysql-arm64:8.3.0
+    container_name: mysql
+    environment:
+      - MYSQL_ROOT_PASSWORD=Wps+123
+      - MYSQL_ROOT_HOST=%
+      - MYSQL_DATABASE=wps
+    ports:
+      - "3306:3306"
+    volumes:
+      - /ksc_aibox/data/mysql:/var/lib/mysql
+      - /ksc_aibox/source/mysql/templates:/docker-entrypoint-initdb.d:ro
+    networks:
+      - ksc-aibox-network
+    restart: always
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    command: ["redis-server", "--requirepass", "suwell5394_redis", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - /ksc_aibox/data/redis:/data
+    networks:
+      - ksc-aibox-network
+    restart: always
+
+  nacos:
+    image: hub.ai.aio.cloud/middleware/nacos-server:v2.3.2-slim
+    container_name: nacos
+    environment:
+      - TZ=Asia/Shanghai
+      - JVM_XMS=256m
+      - JVM_XMX=1024m
+      - MODE=standalone
+      - PREFER_HOST_MODE=nacoshost
+      - NACOS_AUTH_ENABLE=true
+      - NACOS_AUTH_IDENTITY_KEY=nacos
+      - NACOS_AUTH_IDENTITY_VALUE=nacos
+      - NaCOS_CORE_AUTH_ENABLE=true
+      - NACOS_AUTH_TOKEN=012345678901234567890123456789012345678901234567890123456666
+    ports:
+      - "38848:8848"
+      - "9848:9848"
+      - "9849:9849"
+    volumes:
+      - /ksc_aibox/data/nacos:/home/nacos/data
+    networks:
+      - ksc-aibox-network
+    restart: always
+
+  minio:
+    image: hub.ai.aio.cloud/middleware/minio:RELEASE.2024-07-10T18-41-49Z-cpuv1-arm64
+    container_name: minio
+    command: ["minio", "server", "--console-address", ":9090", "/data"]
+    environment:
+      - TZ=Asia/Shanghai
+      - MINIO_ROOT_USER=admin
+      - MINIO_ROOT_PASSWORD=G5pJ2kUq3L8M
+    volumes:
+      - /ksc_aibox/data/minio:/data
+    networks:
+      - ksc-aibox-network
+    restart: always
+
+  slc:
+    image: hub.ai.aio.cloud/middleware/swslc-arm64:3007.1.1.24.0701.16.05
+    container_name: slc
+    privileged: true
+    environment:
+      - TZ=Asia/Shanghai
+      - SLC_ENABLE=false
+      - SLC_SERVICE_PORT=9521
+      - SLC_PORT=9521
+      - SLC_URL=http://slc:9521
+      - SLC_LICENSE_NAME=
+      - SLC_CHECK_ON_BOOT=false
+      - SLC_CHECK_PERIOD=24h
+      - SLC_STATUS_ON_BOOT=false
+      - SLC_CONNECT_TIMEOUT=2000
+      - SLC_READ_TIMEOUT=2000
+    ports:
+      - "39521:9521"
+    volumes:
+      - /dev/mem:/dev/mem
+      - /ksc_aibox/data/slc:/slc/data
+    networks:
+      - ksc-aibox-network
+    restart: always
+
+  elasticsearch:
+    image: hub.ai.aio.cloud/middleware/elasticsearch:8.18.2-gwk-1
+    container_name: elasticsearch
+    environment:
+      - TZ=Asia/Shanghai
+      - node.name=es01
+      - cluster.name=docker-cluster
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xms4G -Xmx4G
+      - ELASTIC_PASSWORD=h3bJ9GqD75Yz
+      - xpack.security.enabled=true
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    volumes:
+      - /ksc_aibox/data/elasticsearch:/usr/share/elasticsearch/data
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    networks:
+      - ksc-aibox-network
+    restart: always
+
+  rabbitmq:
+    image: hub.ai.aio.cloud/middleware/rabbitmq:3.12.14-management
+    container_name: rabbitmq
+    environment:
+      - TZ=Asia/Shanghai
+      - RABBITMQ_DEFAULT_USER=suwell
+      - RABBITMQ_DEFAULT_PASS=3jH5gF7A9B1k
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - /ksc_aibox/data/rabbitmq/data:/var/lib/rabbitmq
+      - /ksc_aibox/data/rabbitmq/logs:/var/log/rabbitmq
+    networks:
+      - ksc-aibox-network
+    restart: always
+
+  plss-gateway:
+    image: hub.ai.aio.cloud/plss/plss-gateway-arm64:20251017-644-WPS
+    container_name: plss-gateway
+    environment:
+      - nacos_server=nacos:8848
+      - nacos_username=nacos
+      - nacos_password=nacos
+      - JAVA_OPTS=-Dnacos-server=nacos:8848 -Dnacos-username=nacos -Dnacos-password=nacos -Dnacos-namespace=
+      - TZ=Asia/Shanghai
+      - SET_CONTAINER_TIMEZONE=true
+      - CONTAINER_TIMEZONE=Asia/Shanghai
+      - jasypt.jasyptType=1
+      - jasypt.keyId=8ef966a1a9194c49a5eafd74cf7d302d
+      - jasypt.appKeyPath=/tmp/config_key
+      - jasypt.secretPath=/tmp/secret_key
+      - AI_API_URL=http://ai-gateway:80/api/v1/chat/completions/13b
+      - QA_API_URL=http://ai-gateway:80/api/v1/chat/completions/qa
+    ports:
+      - "8064:8064"
+    volumes:
+      - /ksc_aibox/data/app/logs/gateway:/home/app/logs/plss-gateway
+      - /ksc_aibox/docker-compose-v2/runtime/config_key:/tmp/config_key:ro
+      - /ksc_aibox/docker-compose-v2/runtime/secret_key:/tmp/secret_key:ro
+    depends_on:
+      - nacos
+      - postgres
+      - mysql
+      - redis
+    networks:
+      - ksc-aibox-network
+    restart: always
+
+  plss-system-server:
+    image: hub.ai.aio.cloud/plss/plss-system-server-arm64:20251225-1067-WPS
+    container_name: plss-system-server
+    environment:
+      - nacos_server=nacos:8848
+      - nacos_username=nacos
+      - nacos_password=nacos
+      - JAVA_OPTS=-Dnacos-server=nacos:8848 -Dnacos-username=nacos -Dnacos-password=nacos -Dnacos-namespace=
+      - TZ=Asia/Shanghai
+      - SET_CONTAINER_TIMEZONE=true
+      - CONTAINER_TIMEZONE=Asia/Shanghai
+      - jasypt.jasyptType=1
+      - jasypt.keyId=8ef966a1a9194c49a5eafd74cf7d302d
+      - jasypt.appKeyPath=/tmp/config_key
+      - jasypt.secretPath=/tmp/secret_key
+    ports:
+      - "8061:8061"
+    volumes:
+      - /ksc_aibox/data/app/logs/system:/home/app/logs/plss-system
+      - /ksc_aibox/docker-compose-v2/runtime/config_key:/tmp/config_key:ro
+      - /ksc_aibox/docker-compose-v2/runtime/secret_key:/tmp/secret_key:ro
+    depends_on:
+      - nacos
+      - postgres
+      - mysql
+    networks:
+      - ksc-aibox-network
+    restart: always
+
+  plss-record:
+    image: hub.ai.aio.cloud/cyl_arm/plss-record-server:20260329-7-kc
+    container_name: plss-record
+    environment:
+      - nacos_server=nacos:8848
+      - nacos_username=nacos
+      - nacos_password=nacos
+      - JAVA_OPTS=-Dnacos-server=nacos:8848 -Dnacos-username=nacos -Dnacos-password=nacos -Dnacos-namespace=
+      - TZ=Asia/Shanghai
+      - SET_CONTAINER_TIMEZONE=true
+      - CONTAINER_TIMEZONE=Asia/Shanghai
+      - jasypt.jasyptType=1
+      - jasypt.keyId=8ef966a1a9194c49a5eafd74cf7d302d
+      - jasypt.appKeyPath=/tmp/config_key
+      - jasypt.secretPath=/tmp/secret_key
+    ports:
+      - "8060:8060"
+    volumes:
+      - /ksc_aibox/data/app/logs/record:/home/app/logs/plss-record
+      - /ksc_aibox/data/app/import:/swdata/builtin
+      - /ksc_aibox/docker-compose-v2/runtime/config_key:/tmp/config_key:ro
+      - /ksc_aibox/docker-compose-v2/runtime/secret_key:/tmp/secret_key:ro
+    depends_on:
+      - nacos
+      - postgres
+    networks:
+      - ksc-aibox-network
+    restart: always
+
+  plss-doc-proc:
+    image: hub.ai.aio.cloud/cyl_arm/plss-document-process-server:20260329-7-kc
+    container_name: plss-doc-proc
+    environment:
+      - nacos_server=nacos:8848
+      - nacos_username=nacos
+      - nacos_password=nacos
+      - JAVA_OPTS=-Dnacos-server=nacos:8848 -Dnacos-username=nacos -Dnacos-password=nacos -Dnacos-namespace=
+      - TZ=Asia/Shanghai
+      - SET_CONTAINER_TIMEZONE=true
+      - CONTAINER_TIMEZONE=Asia/Shanghai
+      - jasypt.jasyptType=1
+      - jasypt.keyId=8ef966a1a9194c49a5eafd74cf7d302d
+      - jasypt.appKeyPath=/tmp/config_key
+      - jasypt.secretPath=/tmp/secret_key
+      - CMD=java -Djava.security.egd=file:/dev/./urandom -Dspring.profiles.active=prod -jar /opt/plss-document-process-server.jar
+      - SLC_ENABLE=true
+      - SLC_URL=http://slc:9521
+      - SLC_LICENSE_NAME=onesystem
+      - SLC_CHECK_ON_BOOT=true
+      - SLC_CHECK_PERIOD=120s
+      - SFL_ENABLE=false
+      - SFL_URL=http://10.213.84.102:9521
+      - SFL_CONNECT_TIMEOUT=2000
+      - SFL_READ_TIMEOUT=2000
+      - SFL_KEY_INDEX=1
+    ports:
+      - "8063:8063"
+    volumes:
+      - /ksc_aibox/data/app/logs/docproc:/home/app/logs/plss-document-process
+      - /ksc_aibox/data/app/import:/swdata/builtin
+      - /ksc_aibox/docker-compose-v2/runtime/config_key:/tmp/config_key:ro
+      - /ksc_aibox/docker-compose-v2/runtime/secret_key:/tmp/secret_key:ro
+    depends_on:
+      - nacos
+      - minio
+      - slc
+    networks:
+      - ksc-aibox-network
+    restart: always
+
+  plss-search-server:
+    image: hub.ai.aio.cloud/plss/plss-search-server-arm64:20251128-865-WPS
+    container_name: plss-search-server
+    environment:
+      - nacos_server=nacos:8848
+      - nacos_username=nacos
+      - nacos_password=nacos
+      - JAVA_OPTS=-Dnacos-server=nacos:8848 -Dnacos-username=nacos -Dnacos-password=nacos -Dnacos-namespace=
+      - TZ=Asia/Shanghai
+      - SET_CONTAINER_TIMEZONE=true
+      - CONTAINER_TIMEZONE=Asia/Shanghai
+      - jasypt.jasyptType=1
+      - jasypt.keyId=8ef966a1a9194c49a5eafd74cf7d302d
+      - jasypt.appKeyPath=/tmp/config_key
+      - jasypt.secretPath=/tmp/secret_key
+    ports:
+      - "8062:8062"
+    volumes:
+      - /ksc_aibox/data/app/logs/search:/home/app/logs/plss-search
+      - /ksc_aibox/data/app/ofd2json:/opt/ofd2json
+      - /ksc_aibox/docker-compose-v2/runtime/config_key:/tmp/config_key:ro
+      - /ksc_aibox/docker-compose-v2/runtime/secret_key:/tmp/secret_key:ro
+    depends_on:
+      - nacos
+      - postgres
+      - elasticsearch
+    networks:
+      - ksc-aibox-network
+    restart: always
+
+  plss-web:
+    image: hub.ai.aio.cloud/cyl_arm/plss-web:20260329-7-kc
+    container_name: plss-web
+    ports:
+      - "80:80"
+    volumes:
+      - /ksc_aibox/docker-compose-v2/runtime/backend.conf:/etc/nginx/conf.d/backend.conf:ro
+      - /ksc_aibox/data/app/html/documentlibrary-wps:/usr/share/nginx/documentlibrary-wps
+      - /ksc_aibox/data/app/html/aiPlatform:/usr/share/nginx/aiPlatform
+    depends_on:
+      - plss-gateway
+    networks:
+      - ksc-aibox-network
+    restart: always
+
+networks:
+  ksc-aibox-network:
+    external: true

@@ -1,0 +1,26 @@
+spring:
+  # Docker 版默认不部署消息队列，只有启用可选 rabbitmq 容器时才会生效。
+  ## mq config 注意: es的连接地址 集群配置逗号分隔
+  ## 1.【单机】Docker Compose 单节点示例: rabbitmq:5672
+  ## 2.【集群】Docker Compose 多节点示例: rabbitmq-1:5672,rabbitmq-2:5672,rabbitmq-3:5672
+  rabbitmq:
+    addresses: rabbitmq:5672
+    virtual-host: /
+    username: suwell
+    password: ${RABBITMQ_PASSWORD}
+    publisher-confirms: true # 开启发送端消息抵达Broker确认
+    publisher-returns: true # 开启发送端消息抵达Queue确认
+    template:
+      mandatory: true # 只要消息抵达Queue，就会异步发送优先回调returnfirm
+    listener:
+      simple:
+        concurrency: 5
+        max-concurrency: 20
+        acknowledge-mode: manual  # 手动ack消息，不使用默认的消费端自动确认方式。默认是自动提交确认消息
+        retry:
+          enabled: true
+          max-attempts: 3000  # 最大重试次数
+          initial-interval: 3000  # 重试的初始间隔，单位毫秒
+          max-interval: 60000  # 最大重试间隔，单位毫秒
+          multiplier: 1.5 # 重试间隔乘数
+          stateless: false

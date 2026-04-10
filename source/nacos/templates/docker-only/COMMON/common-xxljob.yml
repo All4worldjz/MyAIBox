@@ -1,0 +1,29 @@
+# spring:
+#   mail:
+#     host: smtp.qq.com
+#     port: 25
+#     username: xxx@qq.com
+#     from: xxx@qq.com
+#     password: xxx
+#     properties:
+#       mail:
+#         smtp:
+#           auth: false
+#           starttls:
+#             enable: false
+#             required: false
+#           socketFactory:
+#             class: javax.net.ssl.SSLSocketFactory
+xxl:
+  job:
+    core:
+      enable: true
+    # accessToken: default_token
+    accessToken: suwell14176accessToken
+    i18n: zh_CN
+    triggerpool:
+      fast:
+        max: 200
+      slow:
+        max: 100
+    logretentiondays: 30

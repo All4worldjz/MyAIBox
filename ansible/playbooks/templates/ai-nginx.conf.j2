@@ -1,0 +1,44 @@
+events { worker_connections 2048; }
+
+http {
+    # 动态渲染 13B 集群后端池
+    upstream qwen13b_cluster {
+{% if npu_topology.qingqiu_qwen3.enabled %}
+{% for i in range(npu_topology.qingqiu_qwen3.replicas) %}
+        server qingqiu-qwen3-{{ i + 1 }}:1025 max_fails=3 fail_timeout=30s;
+{% endfor %}
+{% else %}
+        server 127.0.0.1:1025 down; # 占位符
+{% endif %}
+    }
+
+    server {
+        listen 80;
+
+        # RAG / 公文写作专用 (负载均衡至卡1、卡3)
+        location /api/v1/chat/completions/13b {
+            proxy_pass http://qwen13b_cluster;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_read_timeout 300s; 
+        }
+
+{% if npu_topology.qa_specialized.enabled %}
+        # 独立问答大模型 (直达卡4 vLLM 引擎)
+        location /api/v1/chat/completions/qa {
+            proxy_pass http://qa-specialized-1:8102;
+            proxy_set_header Host $host;
+            proxy_read_timeout 300s;
+        }
+{% endif %}
+        
+        # 向量特征模型 (直达卡2)
+        location /api/v1/embeddings {
+{% if npu_topology.emb.enabled %}
+            proxy_pass http://emb-1:5377;
+{% else %}
+            return 404;
+{% endif %}
+        }
+    }
+}

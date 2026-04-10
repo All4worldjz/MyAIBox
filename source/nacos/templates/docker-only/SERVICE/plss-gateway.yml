@@ -1,0 +1,112 @@
+spring:
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          lowerCaseServiceId: true
+          enabled: true
+      x-route-id:
+        -configs: false
+      routes:
+        # 系统模块
+        - id: plss-system
+          uri: lb://plss-system
+          predicates:
+            - Path=/system/**
+          filters:
+            # 验证码处理
+            - CacheRequestFilter
+            - ValidateCodeFilter
+            - StripPrefix=1
+        # 文件基础服务
+        - id: plss-record
+          uri: lb://plss-record
+          predicates:
+            - Path=/record/**
+          filters:
+            - StripPrefix=1
+        # 文件搜索服务
+        - id: plss-search
+          uri: lb://plss-search
+          predicates:
+            - Path=/search/**
+          filters:
+            - StripPrefix=1
+        # 文件处理服务
+        - id: plss-document-process
+          uri: lb://plss-document-process
+          predicates:
+            - Path=/process/**
+          filters:
+            - StripPrefix=1
+
+      # gateway的全局跨域请求配置
+      globalcors:
+        # 解决options请求被拦截问题
+        add-to-simple-url-handler-mapping: true
+        corsConfigurations:
+          '[/**]':
+            allowedHeaders: "*"
+            allowedOriginPatterns: "*"
+            allowCredentials: true
+            allowedMethods: "*"
+            # 跨域检测的有效期,单位s
+            maxAge: 3600
+
+# 安全配置
+security:
+  # 验证码
+  captcha:
+    enabled: false
+    type: math
+  # 防止XSS攻击
+  xss:
+    enabled: true
+    excludeUrls:
+      - /system/notice
+  # 不校验白名单
+  ignore:
+    whites:
+      # - /system/v1/auth/logout
+      - /system/v1/auth/login
+      - /system/v1/auth/register
+      - /system/v1/xxlJob/index/toLogin
+      - /toLogin
+      - /*/v2/api-docs
+      - /csrf
+      - /system/v1/auth/ssoVerify
+      - /system/v1/oau/sync/org
+      - /system/v1/oau/sync/user
+      - /system/api/v1/appearance/getAppearance
+      - /system/v1/xxlJob/api/registry
+      - /record/v1/readCallBack/info
+      - /system/v1/external/token/write_assist/get
+      - /record/v1/file/outAccessFile
+      # ocr回调接口
+      - /process/v1/ocrCallBack/reply
+      #  AI回调接口
+      - /process/v1/feature/callback
+      - /system/v1/xxlJob/**
+      #  验证码接口
+      - /system/v1/auth/captcha
+      - /system/v1/auth/captcha/turn
+      - /record/v1/file/replaceRecordFile
+      - /system/v1/esparticiple/queryTxt
+      - /system/v1/config/front
+      - /system/v1/version/latest
+      # 非密系统提示语接口
+      - /system/v1/config/noConfidentialPrompt
+      # 自认证登录接口G添加白名单
+      - /system/v1/auth/auto/login 
+      - /record/v1/readCallBack/attachments
+      # 3.3.0版本新增白名单
+      - /search/reader/download
+      - /search/reader/getFileInfo
+      - /search/document/download
+      - /search/reader/docComparison
+      - /system/v1/auth/ksoAuthSwitch
+      
+## 日志级别增量配置
+app: 
+  global: 
+    log_level: INFO
