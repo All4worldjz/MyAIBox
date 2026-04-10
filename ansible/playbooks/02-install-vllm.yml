@@ -146,62 +146,76 @@
     # ============================================================
     # 阶段 3: 创建vLLM Docker配置
     # ============================================================
+    - name: Create vLLM Docker directory
+      file:
+        path: "/ksc_aibox/scripts/vllm"
+        state: directory
+        mode: '0755'
+
     - name: Create vLLM startup script
       copy:
         dest: "/ksc_aibox/scripts/vllm/start-vllm.sh"
         content: |
           #!/bin/bash
           # vLLM for Ascend NPU 启动脚本
-          
+
           set -e
-          
+
           # 加载CANN环境
           source /usr/local/Ascend/cann/set_env.sh
-          
+
           # 模型配置
           MODEL_NAME=${1:-"Qwen2.5-7B-Instruct"}
           MODEL_PATH="/ksc_aibox/models/llm/${MODEL_NAME}"
           PORT=${2:-8000}
-          
-          # NPU设备
-          NPU_DEVICES="--device /dev/davinci0,/dev/davinci1,/dev/davinci2,/dev/davinci3"
-          
+          NPU_COUNT=${3:-4}
+
           echo "Starting vLLM with model: ${MODEL_NAME}"
           echo "Model path: ${MODEL_PATH}"
           echo "Port: ${PORT}"
-          
+          echo "NPU count: ${NPU_COUNT}"
+
           # 检查模型是否存在
           if [ ! -d "${MODEL_PATH}" ]; then
             echo "Error: Model not found at ${MODEL_PATH}"
+            echo "Available models:"
+            ls -1 /ksc_aibox/models/llm/ 2>/dev/null || echo "  No models found"
             exit 1
           fi
-          
-          # 启动vLLM容器
+
+          # 停止已存在的容器
+          docker rm -f vllm-ascend-${MODEL_NAME} 2>/dev/null || true
+
+          # 启动vLLM容器（使用NPU原生网络，不使用-p映射）
           docker run -d \
             --name vllm-ascend-${MODEL_NAME} \
-            --net host \
+            --network host \
             --shm-size=32g \
-            ${NPU_DEVICES} \
+            --device /dev/davinci0 \
+            --device /dev/davinci1 \
+            --device /dev/davinci2 \
+            --device /dev/davinci3 \
+            --device /dev/davinci_manager \
+            --device /dev/devmm_svm \
+            --device /dev/hisi_hdc \
             -v ${MODEL_PATH}:/model \
             -v /usr/local/Ascend:/usr/local/Ascend:ro \
+            -v /usr/local/bin/npu-smi:/usr/local/bin/npu-smi:ro \
             -e ASCEND_INSTALL_PATH=/usr/local/Ascend \
+            -e ASCEND_VISIBLE_DEVICES=0,1,2,3 \
             -e LD_LIBRARY_PATH=/usr/local/Ascend/cann/lib64:$LD_LIBRARY_PATH \
-            -p ${PORT}:8000 \
             vllm-ascend \
             --model /model \
-            --tensor-parallel-size 4 \
+            --tensor-parallel-size ${NPU_COUNT} \
             --gpu-memory-utilization 0.9 \
             --max-model-len 8192 \
             --host 0.0.0.0 \
-            --port 8000
-          
-          echo "vLLM started successfully"
-        mode: '0755'
+            --port ${PORT}
 
-    - name: Create vLLM Docker directory
-      file:
-        path: "/ksc_aibox/scripts/vllm"
-        state: directory
+          echo ""
+          echo "✅ vLLM started successfully"
+          echo "📍 API endpoint: http://localhost:${PORT}/v1"
+          echo "📊 View logs: docker logs -f vllm-ascend-${MODEL_NAME}"
         mode: '0755'
 
     # ============================================================
