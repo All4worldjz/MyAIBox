@@ -270,7 +270,7 @@ Co-authored-by: Qwen Code <qwen-coder@alibabacloud.com>
 
 | ID | 任务 | 优先级 | 状态 | 负责Agent | 依赖 | 备注 |
 |----|------|--------|------|-----------|------|------|
-| **T005** | 修复 vLLM 服务配置 | P2 | ⏳ 待处理 | **Qwen Code** | T001 | 容器有配置错误 |
+| **T005** | ~~修复 vLLM 服务配置~~ | P2 | ✅ **已完成** | **Qwen Code** | T001 | 7e84f04, 修复网络配置和设备权限 |
 | **T006** | 评估SELinux Permissive安全性 | P2 | ⏳ 待处理 | **Any Agent** | 无 | 从Enforcing调整 |
 | **T007** | 部署数据库服务 (MySQL/PG/Redis) | P2 | ⏳ 待处理 | **Qwen Code** | T005 | Ansible Playbook |
 | **T008** | 部署监控系统 (Prometheus/Grafana) | P3 | ⏳ 待处理 | **Qwen Code** | T007 | |
@@ -293,7 +293,7 @@ Co-authored-by: Qwen Code <qwen-coder@alibabacloud.com>
 | ID | 问题描述 | 发现时间 | 报告Agent | 影响范围 | 当前状态 | 跟进Agent |
 |----|----------|----------|-----------|----------|----------|-----------|
 | **BUG-001** | qingqiu-qwen3-1 容器启动失败，反复重启 | 2026-04-10 | Claude Code | AI推理服务 | 🔍 排查中 | Claude Code |
-| **BUG-002** | vLLM 容器配置错误 | 2026-04-08 | Qwen Code | vLLM服务 | ⏳ 待修复 | - |
+| **BUG-002** | ~~vLLM 容器配置错误~~ | 2026-04-08 | Qwen Code | vLLM服务 | ✅ **已修复** | 7e84f04 |
 | **WARN-001** | NPU固件未生效（需冷启动） | 2026-04-09 | Qwen Code | NPU性能 | ⏳ 待决策 | - |
 | **WARN-002** | SELinux调整为Permissive | 2026-04-09 | Qwen Code | 安全性 | ⏳ 待评估 | - |
 
@@ -301,6 +301,7 @@ Co-authored-by: Qwen Code <qwen-coder@alibabacloud.com>
 
 | ID | 问题描述 | 解决时间 | 解决Agent | 解决方案 |
 |----|----------|----------|-----------|----------|
+| **BUG-002** | vLLM容器配置错误（--net host与-p冲突） | 2026-04-10 | Qwen Code | 修复网络配置和设备权限 | 7e84f04 |
 | **FIX-001** | 项目结构不符合最佳实践 | 2026-04-03 | Qwen Code | 重新组织目录和文件 |
 | **FIX-002** | drivers/npu-backup目录超过GitHub限制 | 2026-04-08 | Qwen Code | 从Git中移除，加入.gitignore |
 | **FIX-003** | K3s架构复杂度高，运维成本大 | 2026-04-09 | Qwen Code | 迁移到Docker Compose v2 |
@@ -314,12 +315,10 @@ Co-authored-by: Qwen Code <qwen-coder@alibabacloud.com>
 ### 2026-04-10
 
 ```
-[13:20] [Qwen Code] 安全修复：替换所有硬编码密码为环境变量 → ✅ 17f59b2, 推送到origin/dev
-[13:16] [Qwen Code] 更新多Agent协同指挥文档Git状态 → ✅ 本文件
+[13:25] [Qwen Code] 修复vLLM配置BUG（T005/BUG-002） → ✅ 7e84f04
+[13:20] [Qwen Code] 推送安全修复和密码环境变量模板 → ✅ a5114f2, 已同步
+[13:20] [Qwen Code] 安全修复：替换所有硬编码密码为环境变量 → ✅ 17f59b2
 [09:41] [Codex] 会话活跃（gpt-5.4模型） → 🟠 117条历史记录
-[01:00] [Qwen Code] 创建多Agent协同指挥文档（含Codex工作记录） → ✅ 本文件
-[01:00] [Qwen Code] 分析Git历史和所有AI工具状态 → ✅ 生成对齐报告
-[00:59] [Qwen Code] 提交商业架构V2 Ansible脚本和模板 → ✅ 16fde62
 ```
 
 ### 2026-04-09
