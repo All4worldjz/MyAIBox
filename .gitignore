@@ -80,9 +80,11 @@ Desktop.ini
 secrets/
 *.secret
 .env
+!.env.example
 .env.*
 .vault_pass
 credentials.yml
+source/**/*.env
 
 # ============================================
 # 日志

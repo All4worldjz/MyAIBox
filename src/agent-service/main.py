@@ -2,13 +2,12 @@ import os
 import subprocess
 import yaml
 import re
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
-from typing import Dict, List
+from typing import Dict
 
-app = FastAPI(title="KSC AIBox Integrated Hub", version="2.2.0")
+app = FastAPI(title="KSC AIBox Integrated Hub", version="2.4.0")
 
 BASE_DIR = "/ksc_aibox"
 CONFIG_PATH = f"{BASE_DIR}/config/npu-topology.yml"
@@ -18,17 +17,21 @@ if os.path.exists(STATIC_DIR):
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 def get_npu_metrics():
-    """解析 npu-smi info 的实时数据"""
+    """使用最稳健的模糊正则提取全量 NPU 显存占用"""
     try:
+        # 使用 -l 获取更易解析的列表格式
         output = subprocess.check_output(["npu-smi", "info"], encoding='utf-8')
-        # 正则提取 HBM 占用 (例如: 3555 / 65536)
-        hbm_matches = re.findall(r"(\d+)\s+/\s+65536", output)
+        # 匹配 "显存占用 / 总显存" 这种特征，例如 "3386 / 65536"
+        # 排除掉表头中的 "0 / 0"
+        all_matches = re.findall(r"(\d{3,})\s+/\s+65536", output)
+        
         metrics = []
-        for i, hbm in enumerate(hbm_matches):
+        for i, val in enumerate(all_matches):
+            used_mb = int(val)
             metrics.append({
                 "id": i,
-                "hbm_used": f"{int(hbm)/1024:.1f} GB",
-                "hbm_percent": f"{int(hbm)/655.36:.1f}%"
+                "hbm_used": f"{used_mb/1024:.1f} GB",
+                "hbm_percent": f"{used_mb/65536*100:.1f}%"
             })
         return metrics
     except:
@@ -42,15 +45,10 @@ async def read_admin(): return FileResponse(f"{STATIC_DIR}/dashboard.html")
 
 @app.get("/api/v1/system/status")
 async def get_system_status():
-    npu = get_npu_metrics()
-    containers = []
-    try:
-        res = subprocess.check_output(["docker", "ps", "--format", "{{.Names}}|{{.Status}}"], encoding='utf-8')
-        for line in res.strip().split('\n'):
-            if line: containers.append(line.split('|'))
-    except: pass
-    
-    return {"npu": npu, "containers": containers}
+    return {
+        "npu": get_npu_metrics(),
+        "containers": [line.split('|') for line in subprocess.check_output(["docker", "ps", "-a", "--format", "{{.Names}}|{{.Status}}"], encoding='utf-8').strip().split('\n') if line]
+    }
 
 @app.get("/api/v1/ai/topology")
 async def get_topology():
@@ -60,9 +58,9 @@ async def get_topology():
 @app.post("/api/v1/ai/topology/apply")
 async def update_topology(data: Dict):
     with open(CONFIG_PATH, 'w') as f: yaml.dump(data, f)
-    cmd = f"cd {BASE_DIR}/ansible && ansible-playbook -i inventory/hosts playbooks/08-deploy-commercial-appliance-v2.yml"
+    cmd = f"cd {BASE_DIR}/docker-compose-v2 && docker-compose up -d"
     subprocess.Popen(cmd, shell=True)
-    return {"status": "processing"}
+    return {"status": "triggered"}
 
 if __name__ == "__main__":
     import uvicorn

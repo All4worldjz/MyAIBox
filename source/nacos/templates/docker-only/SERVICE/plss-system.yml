@@ -118,7 +118,7 @@ suwell:
   slc:
     url: http://slc:9521
     license-name: onesystem
-    boot-check: false
+    bootCheck: false
     connectTimeout: 10000
     readTimeout: 30000
   pushDbConfig: true

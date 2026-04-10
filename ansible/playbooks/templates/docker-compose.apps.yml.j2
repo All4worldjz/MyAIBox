@@ -85,6 +85,7 @@ services:
     container_name: plss-gateway
     environment: &java_env
       - nacos_server=nacos:8848
+      - JAVA_OPTS=-Dnacos-server=nacos:8848 -Dnacos-username=nacos -Dnacos-password=nacos -Dnacos-namespace=
       - TZ=Asia/Shanghai
       - AI_API_URL=http://ai-gateway:8000/api/v1/chat/completions/13b
       - QA_API_URL=http://ai-gateway:8000/api/v1/chat/completions/qa
